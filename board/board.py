@@ -3,6 +3,20 @@
 class CannotPerformException(Exception):
   pass
 
+class PermanentFeature(object):
+  def isPermanent(self):
+    return True
+
+  def isTemporary(self):
+    return False
+
+class TemporaryFeature(object):
+  def isPermanent(self):
+    return False
+
+  def isTemporary(self):
+    return True
+
 class Hex(object):
   """A board hex, which may contain permanent or temporary features."""
   def __init__(self,
@@ -15,19 +29,33 @@ class Hex(object):
     self.trade_stations = trade_stations
 
   def Contains(self):
-    pass
+    return {"wormholes": self.wormholes,
+            "planets": self.planets,
+            "trade_stations": self.trade_stations}
 
   def _ContainsPermanent(self):
     """Return a list of objects that are permanent: e.g. planets, wormholes."""
-    pass
+    ret_list = []
+    for item in self.planets:
+      if item.isPermanent():
+        ret_list.append(item)
+    return ret_list
 
   def _ContainsTemporary(self):
     """Return a list of objects that are 'just passing through'."""
-    pass
+    ret_list = []
+    for item in self.planets:
+      if item.isTemporary():
+        ret_list.append(item)
+    return ret_list
 
   def AddEntity(self, entity):
-    """Add an entity to the hex. Is usually a temporary item like a ship."""
-    pass
+    """Add an entity to the hex; temporary, like a ship, or permanent."""
+    pass 
+
+  def AddPlanet(self, planet):
+    """Only add a planet to the hex."""
+    self.planets.append(planet)
 
   def ConnectTo(self, hex, direction):
     """Connect this hex to another one in a particular direction, supplied."""
@@ -59,7 +87,7 @@ class IonStorm(Hex):
   pass
 
 
-class Planet(object):
+class Planet(PermanentFeature):
   """A TI3 planet. We won't bother with accessors/mutators for most of this."""
   def __init__(self,
                name,
