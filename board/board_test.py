@@ -13,18 +13,18 @@ class TestPlanetHexFunctions(unittest.TestCase):
 
   def testContains(self):
     self.assertEqual(self.hex.Contains(), self.planet1)
-    
+   
   def testContainsPermanent(self):
     self.assertEqual(self.hex._ContainsPermanent(), self.planet2)
-    
+   
   def testContainsTemporary(self):
     self.assertEqual(self.hex._ContainsTemporary(), None)
-    
+   
   def testAddEntity(self):
     self.planet2 = board.Planet("Qaalude", 1, 3)
     self.hex.AddEntity(self.planet2)
     self.assertEqual(self.hex.Contains(), [self.planet1, self.planet2])
-  
+
   def testConnectTo(self):
     pass
     
