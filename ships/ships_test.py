@@ -1,27 +1,40 @@
 #!/usr/bin/python
 
-import ships
-
-
 import os
 import pprint
 import unittest
 
+import dice
+import fleet
+import ships
+
 class TestDiceFunctions(unittest.TestCase):
   def testRolling(self):
-    c = ships.Dice.RollWithTarget(target_number=1,
+    c = dice.Dice.RollWithTarget(target_number=1,
                                   number_of_dice=10,
                                   sides=10)
     self.assertEqual(c, 10)
-    c = ships.Dice.RollWithTarget(target_number=11,
+    c = dice.Dice.RollWithTarget(target_number=11,
                                   number_of_dice=100,
                                   sides=10)
     self.assertEqual(c, 0)
-    c = ships.Dice.RollWithTarget(target_number=5,
+    c = dice.Dice.RollWithTarget(target_number=5,
                                   number_of_dice=1000,
                                   sides=10)
     """This is kinda shitty"""
     self.assertGreater(c, 400)
+
+class TestUnitCreation(unittest.TestCase):
+  def setUp(self):
+    pass
+
+  def tearDown(self):
+    pass
+
+  def makeGenericCombatUnit(self):
+    cu = ships.CombatUnit(edition = 4)
+    self.assertEqual(cu.edition, 4)
+    self.assertEqual(cu.damage, 0)
 
 class TestShipsFunctions(unittest.TestCase):
 
@@ -35,8 +48,20 @@ class TestShipsFunctions(unittest.TestCase):
     c = ships.Cruiser()
     self.assertEqual(c.movement, 2)
 
-  def testCarrierCargoLimit(self):
-    c = ships.Carrier()
+  def testCarrierCargoLimit4(self):
+    c = ships.Carrier(edition = 4)
+    self.assertEqual(c.edition, 4)
+    """ 1-5 """
+    for x in range(1,4):
+      c.AddToCargo("x" + str(x))
+    self.assertEqual(len(c.cargo), 3)
+    self.assertEqual(c.AddToCargo("y"), True)
+    self.assertEqual(c.AddToCargo("z"), False)
+    self.assertEqual(len(c.cargo), 4)
+
+  def testCarrierCargoLimit3(self):
+    c = ships.Carrier(edition = 3)
+    self.assertEqual(c.edition, 3)
     """ 1-5 """
     for x in range(1,6):
       c.AddToCargo("x")
@@ -52,16 +77,16 @@ class TestFleetFunctions(unittest.TestCase):
     self.f2 = {'Destroyer': 5, 'WarSun': 1, 'Fighter': 4}
     self.f3 = {'Fighter': 1, 'Cruiser': 1, 'Destroyer': 1,
                'WarSun': 1, 'Dreadnought': 1}
-    self.f = ships.Fleet(self.f1, self.f2)
-    self.f2 = ships.Fleet(self.f3, {})
+    self.df1 = fleet.Fleet(self.f1, self.f2)
+    self.df2 = fleet.Fleet(self.f3, {})
 
   def testFleetCreation(self):
-    self.f.InstantiateShipObjects(self.f1)
-    self.assertIsNotNone(self.f)
- 
+    self.df1.InstantiateShipObjects(self.f1)
+    self.assertIsNotNone(self.df1)
+
   def testFleetTotalDamage(self):
-    self.f.InstantiateShipObjects(self.f1)
-    self.assertEqual(14, ships.CalculateTotalDamageCapacity(self.f.player_1_fleet))
+    self.df1.InstantiateShipObjects(self.f1)
+    self.assertEqual(14, fleet.CalculateTotalDamageCapacity(self.df1.player_1_fleet))
 
   def testFleetAttackRound(self):
     self.f.player_1_fleet = self.f.InstantiateShipObjects(self.f1)
@@ -78,13 +103,13 @@ class TestFleetFunctions(unittest.TestCase):
     self.f.player_2_fleet = self.f.InstantiateShipObjects(self.f2)
     damage_distributed = 0
     points = 3
-    res = ships.RemoveElems(damage_distributed,
+    res = fleet.RemoveElems(damage_distributed,
                             self.f.player_1_fleet, 'Fighter', points)
     self.assertEqual(res, 3)
     self.assertEqual(len(self.f.player_1_fleet['Fighter']), 1)
     damage_distributed = 0
     points = 13
-    res = ships.RemoveElems(damage_distributed,
+    res = fleet.RemoveElems(damage_distributed,
                             self.f.player_1_fleet, 'Cruiser', points)
     self.assertEqual(res, 3)
     self.assertEqual(len(self.f.player_1_fleet['Cruiser']), 0)
@@ -100,7 +125,7 @@ class TestFleetFunctions(unittest.TestCase):
     self.assertEqual(new_f.get('Destroyer'), [])
     #self.assertEqual(new_f.get('Cruiser'), [])
     pprint.pprint(new_f)
-   
+
   def testFleetInOrderDistributeDamage(self):
     self.f2.player_1_fleet = self.f.InstantiateShipObjects(self.f3)
     pprint.pprint(self.f2.player_1_fleet)
@@ -116,4 +141,3 @@ class TestFleetFunctions(unittest.TestCase):
 
 if __name__ == '__main__':
   unittest.main()
-
