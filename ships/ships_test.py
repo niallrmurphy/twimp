@@ -73,25 +73,27 @@ class TestShipsFunctions(unittest.TestCase):
 class TestFleetFunctions(unittest.TestCase):
 
   def setUp(self):
-    self.f1 = {'Cruiser': 3, 'Destroyer': 7, 'Fighter': 4}
-    self.f2 = {'Destroyer': 5, 'WarSun': 1, 'Fighter': 4}
-    self.f3 = {'Fighter': 1, 'Cruiser': 1, 'Destroyer': 1,
+    # Static fleets by name
+    self.sfbn1 = {'Cruiser': 3, 'Destroyer': 7, 'Fighter': 4}
+    self.sfbn2 = {'Destroyer': 5, 'WarSun': 1, 'Fighter': 4}
+    self.sfbn3 = {'Fighter': 1, 'Cruiser': 1, 'Destroyer': 1,
                'WarSun': 1, 'Dreadnought': 1}
-    self.df1 = fleet.Fleet(self.f1, self.f2)
-    self.df2 = fleet.Fleet(self.f3, {})
+    # Instantiated fleets
+    self.if1 = fleet.Fleet(self.sfbn1, self.sfbn2)
+    self.if2 = fleet.Fleet(self.sfbn3, {})
 
   def testFleetCreation(self):
-    self.df1.InstantiateShipObjects(self.f1)
-    self.assertIsNotNone(self.df1)
+    self.if1.InstantiateShipObjects(self.sfbn1)
+    self.assertIsNotNone(self.if1)
 
   def testFleetTotalDamage(self):
-    self.df1.InstantiateShipObjects(self.f1)
-    self.assertEqual(14, fleet.CalculateTotalDamageCapacity(self.df1.player_1_fleet))
+    self.if1.InstantiateShipObjects(self.sfbn1)
+    self.assertEqual(14, fleet.CalculateTotalDamageCapacity(self.if1.player_1_fleet))
 
   def testFleetAttackRound(self):
-    self.f.player_1_fleet = self.f.InstantiateShipObjects(self.f1)
-    self.f.player_2_fleet = self.f.InstantiateShipObjects(self.f2)
-    self.assertGreater(self.f.AttackRound(), (0, 0))
+    self.if1.player_1_fleet = self.if1.InstantiateShipObjects(self.sfbn1)
+    self.if1.player_2_fleet = self.if2.InstantiateShipObjects(self.sfbn2)
+    self.assertGreater(self.if1.AttackRound(), (0, 0))
 
   def testFleetDistributeDamageWipeout(self):
     self.f.player_1_fleet = self.f.InstantiateShipObjects(self.f1)
