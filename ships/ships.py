@@ -3,10 +3,22 @@
 
 from __future__ import print_function
 
+import enum
 import pprint
 import random
 
 import dice
+
+class ShipType(enum.Enum):
+    SPACEDOCK = 1
+    PDS = 2
+    FIGHTER = 3
+    CARRIER = 4
+    CRUISER = 5
+    DESTROYER = 6
+    DREADNOUGHT = 7
+    WARSUN = 8
+    FLAGSHIP = 9
 
 class CombatUnit(object):
     def __init__(self, edition=None, verbosity=False):
@@ -101,6 +113,7 @@ class Carrier(SpaceVehicle):
             self.capacity_limit = 4
         else:
             self.capacity_limit = 6
+        self.shiptype = ShipType.CARRIER
         self.cargo = []
 
     def CanCarryFighters(self):
@@ -124,6 +137,7 @@ class Cruiser(SpaceVehicle):
         self.movement = 2
         self.max_produceable = 8
         self.production_cost = 2
+        self.shiptype = ShipType.CRUISER
 
     def GenerateHits(self):
         return dice.Dice.RollWithTarget(7, 1)
@@ -134,6 +148,7 @@ class Destroyer(SpaceVehicle):
         self.movement = 2
         self.max_produceable = 8
         self.production_cost = 1
+        self.shiptype = ShipType.DESTROYER
 
     def GenerateHits(self):
         return dice.Dice.RollWithTarget(9, 1)
@@ -150,6 +165,7 @@ class Dreadnought(SpaceVehicle):
         self.movement = 2
         self.production_cost = 4 if self.edition == 4 else 5
         self.capacity_limit = 1
+        self.shiptype = ShipType.DREADNOUGHT
 
     def GenerateHits(self):
         return Dice.RollWithTarget(5, 1)
@@ -173,6 +189,7 @@ class Fighter(SpaceVehicle):
         super(Fighter, self).__init__(edition)
         self.max_produceable = 10
         self.production_cost = 0.5
+        self.shiptype = ShipType.FIGHTER
 
     def GenerateHits(self):
         return dice.Dice.RollWithTarget(9, 1)
@@ -182,6 +199,7 @@ class Flagship(SpaceVehicle):
         super(Fighter, self).__init__(edition)
         self.max_produceable = 1
         self.production_cost = 5
+        self.shiptype = ShipType.FLAGSHIP
 
     def GenerateHits(self):
         return dice.Dice.RollWithTarget(9, 1)
@@ -190,10 +208,11 @@ class Infantry(CombatUnit):
     pass
 
 class PDS(SpaceVehicle):
-    def __init__(self, edition = 4):
+    def __init__(self, edition=4):
         super(PDS, self).__init__(edition)
         self.max_produceable = 6
         self.production_cost = 2
+        self.shiptype = ShipType.PDS
 
     def GenerateHits(self):
         return dice.Dice.RollWithTarget(6, 1)
@@ -202,7 +221,11 @@ class PDS(SpaceVehicle):
         return True
 
 class SpaceDock(SpaceVehicle):
-    pass
+    def __init__(self, edition=4):
+        super(SpaceDock, self).__init__(edition)
+        self.max_produceable = 6
+        self.production_cost = 4
+        self.shiptype = ShipType.SPACEDOCK
 
 class WarSun(SpaceVehicle):
     def __init__(self, edition = 4):
@@ -211,6 +234,7 @@ class WarSun(SpaceVehicle):
         self.max_produceable = 2
         self.production_cost = 12
         self.cargo = []
+        self.shiptype = ShipType.WARSUN
 
     def GenerateHits(self):
         return dice.Dice.RollWithTarget(3, 3)

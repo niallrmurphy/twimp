@@ -8,6 +8,7 @@ import dice
 import fleet
 import ships
 
+from ships import ShipType
 
 class TestDiceFunctions(unittest.TestCase):
     def testRolling(self):
@@ -86,12 +87,40 @@ class TestFleetFunctions(unittest.TestCase):
         self.sfbn2 = {'Destroyer': 5, 'WarSun': 1, 'Fighter': 4}
         self.sfbn3 = {'Fighter': 1, 'Cruiser': 1, 'Destroyer': 1,
                       'WarSun': 1, 'Dreadnought': 1}
+        self.sfbe1 = {ShipType.CRUISER: 3, ShipType.DESTROYER: 7, ShipType.FIGHTER: 4}
+        self.sfbe2 = {ShipType.DESTROYER: 5, ShipType.WARSUN: 1, ShipType.FIGHTER: 4}
+        self.sfbe3 = {ShipType.FIGHTER: 1, ShipType.CRUISER: 1, ShipType.DESTROYER: 1,
+                      ShipType.WARSUN: 1, ShipType.DREADNOUGHT: 1}
         # Instantiated fleets
         self.if1 = fleet.Fleet(self.sfbn1, self.sfbn2)
         self.if2 = fleet.Fleet(self.sfbn3, {})
         # Ship objects
         self.if1.player_1_fleet = self.if1.InstantiateShipObjects(self.sfbn1)
         self.if1.player_2_fleet = self.if2.InstantiateShipObjects(self.sfbn2)
+
+    def testCountShipsOfType(self):
+        """We should be able to count how many ships of what type in a fleet."""
+        self.assertEqual((7, 5), self.if1.CountShipsOfType('Destroyer'))
+
+    def testAddShipsToFleet(self):
+        """Starting with a blank fleet, simulate construction with budget and produce limits."""
+        self.if1 = fleet.Fleet({}, {}, False)
+        self.if2 = fleet.Fleet({}, {}, False, budget=5)
+        # Try to add something to the third and None-th fleet, which don't exist.
+        self.assertEqual(False, self.if1.AddShipToFleet('Fighter', 3))
+        self.assertEqual(False, self.if1.AddShipToFleet('Fighter'))
+        # Try to add something to a zero-budget fleet (failure)
+        self.assertEqual(False, self.if1.AddShipToFleet('Fighter', 1))
+        # Try to add something to a 2-budget fleet (success under ignore_dock)
+        self.assertTrue(self.if2.AddShipToFleet('Fighter', 1))
+        # Try to add a larger than 5 thing to a 5-budget fleet (failure)
+        self.assertFalse(self.if2.AddShipToFleet('WarSun', 1))
+        # Try to build something when ignore_dock is False and no dock exists; fail
+        self.assertFalse(self.if2.AddShipToFleet('Carrier', ignore_dock=False))
+        # Try to build a dock when ignore_dock is False and no dock exists; succeed
+        self.assertTrue(self.if2.AddShipToFleet('SpaceDock', player_fleet=1, ignore_dock=False))
+        # Can only add fighters when fleet has capacity for them
+        self.assertEqual((1,0), self.if2.CountShipsOfType('Fighter'))
 
     def testFleetTotalDamage(self):
         """The first fleet should be able to soak 14 hits."""
