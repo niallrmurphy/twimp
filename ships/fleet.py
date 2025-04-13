@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # Ship simulator, updated for TW4.
 
 from __future__ import print_function
