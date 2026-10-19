@@ -1,25 +1,10 @@
 #!/usr/bin/env python3
 # Two-sided fleet simulator, for TI4.
 
+from twimp import agents
+from twimp import combat
 from twimp import dice as dice_lib
 from twimp.units import Unit, UnitType
-
-
-# Order in which hits are assigned by DistributeMinimumDamage: cheapest losses
-# first. Sustain Damage passes come before any ship is actually lost.
-# Each entry is (unit type, sustain_only).
-MINIMUM_DAMAGE_ORDER = [
-    (UnitType.FIGHTER, False),
-    (UnitType.DREADNOUGHT, True),
-    (UnitType.WARSUN, True),
-    (UnitType.FLAGSHIP, True),
-    (UnitType.DESTROYER, False),
-    (UnitType.CRUISER, False),
-    (UnitType.CARRIER, False),
-    (UnitType.DREADNOUGHT, False),
-    (UnitType.FLAGSHIP, False),
-    (UnitType.WARSUN, False),
-]
 
 
 class Fleet(object):
@@ -99,9 +84,10 @@ class Fleet(object):
     def DistributeMinimumDamage(self, fleet, target_points):
         """Distribute assigned damage to a fleet, attempting to minimise the impact.
 
-        Kill off fighters first, then use Sustain Damage on dreadnoughts, war
-        suns and flagships, then lose destroyers, cruisers, carriers, and
-        finally dreadnoughts, flagships and war suns. Only ships take hits.
+        Uses the GreedyAgent's hit assignment: fighters first, then Sustain
+        Damage on dreadnoughts, war suns and flagships, then destroyers,
+        cruisers, carriers, and finally dreadnoughts, flagships and war suns.
+        Only ships take hits.
 
         Args:
         fleet: a fleet in dict format (e.g. {UnitType.DESTROYER: [<Unit>]}),
@@ -110,59 +96,27 @@ class Fleet(object):
         Returns:
         fleet: the now presumably sadly depleted fleet.
         """
-        # 1. Check for wipeout.
-        if target_points >= CalculateTotalDamageCapacity(fleet):
+        ships = [u for units in fleet.values() for u in units if u.IsShip()]
+        hits = target_points
+        if hits >= combat.TotalDamageCapacity(ships):
+            # Wipeout: remove every ship type outright.
             if self.verbosity: print ("Note: Wipeout for this fleet")
             for unit_type in [t for t, units in fleet.items()
                               if units and units[0].IsShip()]:
                 del fleet[unit_type]
             return fleet
-        # 2. Now run down the damage clock.
-        remaining = target_points
-        for unit_type, sustain_only in MINIMUM_DAMAGE_ORDER:
-            if remaining == 0:
-                break
-            if fleet.get(unit_type):
-                remaining -= ApplyHitsToType(fleet, unit_type, remaining,
-                                             sustain_only)
+        assignment = agents.GreedyAgent().AssignHits(ships, hits)
+        destroyed = combat.ApplyAssignment(ships, assignment, hits)
+        for unit_type, units in fleet.items():
+            fleet[unit_type] = [u for u in units
+                                if all(u is not d for d in destroyed)]
         return fleet
 
 
 def CalculateTotalDamageCapacity(fleet_obj):
     """Total hits the ships in a fleet can absorb, including Sustain Damage."""
-    total_damage_capacity = 0
-    for units in fleet_obj.values():
-        for unit in units:
-            if unit.IsShip():
-                total_damage_capacity += unit.CanHandleDamage()
-    return total_damage_capacity
-
-
-def ApplyHitsToType(fleet, unit_type, hits, sustain_only=False):
-    """Assign up to `hits` hits, one per unit, to units of one type.
-
-    With sustain_only, only undamaged units with Sustain Damage are hit, and
-    they are damaged rather than destroyed. Otherwise each hit destroys a unit.
-    Destroyed units are removed from the fleet.
-
-    Returns:
-      the number of hits actually assigned.
-    """
-    assigned = 0
-    survivors = []
-    for unit in fleet[unit_type]:
-        if assigned == hits:
-            survivors.append(unit)
-        elif sustain_only:
-            if unit.CanHandleDamage() > 1:
-                unit.ReceiveHits(1)
-                assigned += 1
-            survivors.append(unit)
-        else:
-            unit.ReceiveHits(unit.CanHandleDamage())
-            assigned += 1
-    fleet[unit_type] = survivors
-    return assigned
+    return combat.TotalDamageCapacity(
+        [u for units in fleet_obj.values() for u in units])
 
 
 if __name__ == '__main__':

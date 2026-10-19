@@ -25,10 +25,13 @@ Run the tests from the repo root with `python3 -m unittest`.
 |---|---|
 | `twimp/units.py` | 4e unit data table (`UNIT_STATS`) and a single `Unit` class keyed by `UnitType`. Handles sustain damage, cargo, and combat, AFB, bombardment and space cannon rolls. |
 | `twimp/dice.py` | Seedable `Dice`; every roll goes through an injected instance. |
-| `twimp/fleet.py` | Two-sided `Fleet`: attack rounds, greedy hit assignment with sustain damage, building against a budget and plastic limits. |
+| `twimp/agents.py` | The decision interface: `Agent` (`AssignHits`, `DeclareRetreat`) and `GreedyAgent`, the default hit-assignment policy. |
+| `twimp/combat.py` | `SpaceCombat`: the full rules sequence (AFB, retreat announcements, rolls, validated hit assignment, retreat), with a per-round report. |
+| `twimp/simulate.py` | CLI odds calculator: `python3 -m twimp.simulate dreadnought=2,carrier,fighter=3 destroyer=6 --seed 1`. |
+| `twimp/fleet.py` | Older two-sided `Fleet`: building against a budget and plastic limits, plus simple attack rounds. Its damage handling now goes through `GreedyAgent`. |
 | `twimp/board.py` | `Hex` and `Planet` with no geometry; most methods are stubs. |
 | `twimp/cards.py` | Empty. |
-| `tests/` | 45 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
+| `tests/` | 70 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
 
 ---
 
@@ -49,24 +52,30 @@ Still open: space docks can be "built" through `Fleet.AddShipToFleet`, which
 the rules don't allow (they come from the Construction strategy card). This can
 stay until production is done properly in stage 5.
 
-## Stage 1: Correct space combat (in isolation)
+## Stage 1: Correct space combat (in isolation) ✅ done
 
-Goal: a faithful 4e space combat between two forces in one system, with no board yet.
+- `SpaceCombat` runs the rules sequence: anti-fighter barrage in round 1 only
+  (hits go to fighters; extra hits are wasted, and if AFB leaves a side with
+  no ships the combat ends), then retreat announcements (defender first; if
+  the defender retreats the attacker can't), then simultaneous rolls, then
+  hit assignment, then the retreat itself. Draws are possible.
+- Every hit assignment comes from the side's `Agent` and is validated: the
+  right number of hits, only on ships in the combat, and no ship taking more
+  hits than it can absorb.
+- `GreedyAgent` is the single home of the "lose as little as possible"
+  policy; `Fleet` uses it too.
+- Scripted-dice tests replay combats exactly, including 2 dreadnoughts vs 4
+  destroyers worked through die by die.
 
-- The combat sequence in rules order: anti-fighter barrage (first round only),
-  then retreat declaration (stub it for now), then simultaneous rolls, then hit
-  assignment, repeating until one side is gone.
-- Treat Sustain Damage as a choice: a damaged ship is flipped, not removed, and
-  the hit counts as assigned.
-- **Introduce the decision interface here**: a `Player`/`Agent` protocol with
-  a first method such as `assign_hits(units, n) -> assignment`. Ship the
-  current greedy logic as the default policy. Every later player choice goes
-  through this same seam.
-- A small CLI combat simulator that prints win probabilities for two fleets
-  over N runs. This is useful right away and a good check on correctness.
-
-**Done when:** scripted scenarios (e.g. 2 dreadnoughts vs 4 destroyers with fixed
-dice) resolve exactly as worked by hand from the rules.
+Deferred to later stages:
+- Where a ship retreats to, and whether it can, depends on the board, so
+  for now the caller passes `attacker_can_retreat` and `defender_can_retreat`
+  (stage 3/5).
+- Space cannon offense is part of the tactical action, not space combat
+  (stage 5).
+- Removing fighters that exceed capacity after carriers are lost (stage 4,
+  with the other capacity rules).
+- Unit upgrades and combat modifiers, e.g. the nebula defender +1 (stages 3 and 7).
 
 ## Stage 2: Ground combat and invasion (still no board)
 

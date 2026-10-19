@@ -84,26 +84,6 @@ class TestFleetFunctions(unittest.TestCase):
         self.assertEqual(self.if1.DistributeMinimumDamage(f1, 14), {})
         self.assertEqual(self.if1.player_1_fleet, {})
 
-    def testApplyHitsToType(self):
-        """We should remove ships from a fleet, given sufficient damage."""
-        f1 = self.if1.player_1_fleet
-        # When we apply 3 damage to a fleet containing 4 fighters,
-        # 3 should have gone and one should be left
-        self.assertEqual(fleet.ApplyHitsToType(f1, FIGHTER, 3), 3)
-        self.assertEqual(len(f1[FIGHTER]), 1)
-        # More hits than cruisers: only 3 are assigned.
-        self.assertEqual(fleet.ApplyHitsToType(f1, CRUISER, 13), 3)
-        self.assertEqual(len(f1[CRUISER]), 0)
-
-    def testApplyHitsSustainOnly(self):
-        f = fleet.Fleet({DREADNOUGHT: 2}, {})
-        f1 = f.player_1_fleet
-        self.assertEqual(fleet.ApplyHitsToType(f1, DREADNOUGHT, 3, sustain_only=True), 2)
-        self.assertEqual(len(f1[DREADNOUGHT]), 2)
-        self.assertTrue(all(d.IsDamaged() for d in f1[DREADNOUGHT]))
-        # Already damaged: no more sustain available.
-        self.assertEqual(fleet.ApplyHitsToType(f1, DREADNOUGHT, 1, sustain_only=True), 0)
-
     def testFleetDistributeDamage(self):
         f1 = self.if1.player_1_fleet
         new_f = self.if1.DistributeMinimumDamage(f1, 4)
