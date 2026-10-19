@@ -25,13 +25,15 @@ Run the tests from the repo root with `python3 -m unittest`.
 |---|---|
 | `twimp/units.py` | 4e unit data table (`UNIT_STATS`) and a single `Unit` class keyed by `UnitType`. Handles sustain damage, cargo, and combat, AFB, bombardment and space cannon rolls. |
 | `twimp/dice.py` | Seedable `Dice`; every roll goes through an injected instance. |
-| `twimp/agents.py` | The decision interface: `Agent` (`AssignHits`, `DeclareRetreat`) and `GreedyAgent`, the default hit-assignment policy. |
-| `twimp/combat.py` | `SpaceCombat`: the full rules sequence (AFB, retreat announcements, rolls, validated hit assignment, retreat), with a per-round report. |
+| `twimp/agents.py` | The decision interface: `Agent` (`AssignHits`, `DeclareRetreat`, `ChooseBombardment`, `CommitGroundForces`) and `GreedyAgent`, a simple default for all of them. |
+| `twimp/combat.py` | `SpaceCombat`: the full rules sequence (AFB, retreat announcements, rolls, validated hit assignment, retreat), with a per-round report. `GroundCombat` shares the round loop. |
+| `twimp/simulate_invasion.py` | CLI odds of taking a planet: `python3 -m twimp.simulate_invasion --ships warsun --ground infantry=3 --planet infantry=2,pds --seed 1`. |
+| `twimp/invasion.py` | `Invasion`: bombardment, committing ground forces, space cannon defense, ground combat, establishing control, with a report per planet. |
 | `twimp/simulate.py` | CLI odds calculator: `python3 -m twimp.simulate dreadnought=2,carrier,fighter=3 destroyer=6 --seed 1`. |
 | `twimp/fleet.py` | Older two-sided `Fleet`: building against a budget and plastic limits, plus simple attack rounds. Its damage handling now goes through `GreedyAgent`. |
-| `twimp/board.py` | `Hex` and `Planet` with no geometry; most methods are stubs. |
+| `twimp/board.py` | `Planet` has a controller, an exhausted flag, and each player's ground forces and structures. `Hex` has no geometry yet. |
 | `twimp/cards.py` | Empty. |
-| `tests/` | 70 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
+| `tests/` | 102 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
 
 ---
 
@@ -77,15 +79,34 @@ Deferred to later stages:
   with the other capacity rules).
 - Unit upgrades and combat modifiers, e.g. the nebula defender +1 (stages 3 and 7).
 
-## Stage 2: Ground combat and invasion (still no board)
+## Stage 2: Ground combat and invasion (still no board) ✅ done
 
-- Infantry as units, planets carrying ground forces per player.
-- Invasion steps: bombardment (blocked by planetary shield), commit ground
-  forces, space cannon defense, ground combat, establish control.
-- Planet ownership changes hands and the planet becomes exhausted on capture.
+- Planets hold each player's ground forces and structures, plus a controller
+  and an exhausted flag. A newly gained planet is exhausted.
+- `GroundCombat`: infantry roll 8, rounds repeat until one or both sides are
+  gone, and there's no retreat.
+- `Invasion` runs the five steps in order:
+  1. **Bombardment**: only planets holding other players' ground forces can
+     be targeted. A Planetary Shield (PDS) blocks it unless the active
+     player has a war sun in the system. The defender picks its losses.
+  2. **Commit ground forces**: the agent chooses which ground forces land on
+     which planets. Any not committed stay in space.
+  3. **Space cannon defense**: PDS on a planet fire at the ground forces
+     just committed to it.
+  4. **Ground combat** on each planet with both sides' ground forces.
+  5. **Establish control**: the active player gains each planet it still
+     has ground forces on, and other players' structures there are destroyed.
+     If both sides are wiped out, the defender keeps the planet.
+- `python3 -m twimp.simulate_invasion` estimates the odds of taking a planet.
+- Every agent choice is validated (`IllegalChoice`). `GreedyAgent` bombards
+  the planet with the most defenders and lands everything on the
+  weakest-held planet it doesn't control.
 
-**Done when:** scripted invasions resolve correctly, including the PDS
-planetary shield blocking bombardment.
+Deferred:
+- Ground forces in space come in as a plain list. Taking them off carriers
+  (`Unit.cargo`) belongs with capacity in stage 4 and movement in stage 5.
+- Players are plain strings until stage 4 brings `Player`.
+- Mechs, and other PoK units, are out of scope.
 
 ## Stage 3: The galaxy
 

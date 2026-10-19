@@ -88,7 +88,7 @@ class IonStorm(Hex):
 
 
 class Planet(PermanentFeature):
-  """A TI3 planet. We won't bother with accessors/mutators for most of this."""
+  """A TI4 planet. We won't bother with accessors/mutators for most of this."""
   def __init__(self,
                name,
                resources,
@@ -105,23 +105,53 @@ class Planet(PermanentFeature):
       raise CannotPerformException("Can't have a planet without defined influence")
     else:
       self.influence = influence
-    self.holder = None
-    self.denizens = None
+    # The player who controls the planet (holds its card), or None.
+    self.controller = None
+    self.exhausted = False
+    # Ground forces and structures on the planet: {player: [Unit, ...]}.
+    self.units = {}
+
+  def __repr__(self):
+    return "<Planet %s>" % self.name
+
+  def GainControl(self, player):
+    """Give control to a player. A newly gained planet's card is exhausted."""
+    if self.controller != player:
+      self.controller = player
+      self.exhausted = True
 
   def SwitchOwner(self, owner):
-    self.holder = owner
+    self.GainControl(owner)
 
   def IsNeutral(self):
-    """Neutral planets are those that are not held by a player."""
-    if self.holder is None:
-      return True
-    else:
-      return False
+    """Neutral planets are those that are not controlled by a player."""
+    return self.controller is None
+
+  def AddUnit(self, player, unit):
+    self.units.setdefault(player, []).append(unit)
+
+  def UnitsOf(self, player):
+    """The live list of a player's units here; mutating it changes the planet."""
+    return self.units.setdefault(player, [])
+
+  def GroundForces(self, player):
+    return [u for u in self.units.get(player, []) if u.IsGroundForce()]
+
+  def Structures(self, player):
+    return [u for u in self.units.get(player, []) if u.IsStructure()]
+
+  def OtherPlayers(self, player):
+    """Other players with units on this planet."""
+    return [p for p, units in self.units.items() if p != player and units]
 
   def IsEmpty(self):
     """Empty planets are those with no ground forces on them."""
-    pass
+    return not any(u.IsGroundForce()
+                   for units in self.units.values() for u in units)
 
+  def RemoveUnits(self, player, to_remove):
+    self.units[player] = [u for u in self.units.get(player, [])
+                          if all(u is not r for r in to_remove)]
 
 
 class Board(object):

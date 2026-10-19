@@ -198,5 +198,35 @@ class TestSpaceCombat(unittest.TestCase):
                                    [cruiser, cruiser], 2)
 
 
+class TestGroundCombat(unittest.TestCase):
+    def testInfantryHitOnEight(self):
+        dice = ScriptedDice([8, 7, 1])
+        result = combat.GroundCombat(Units(UnitType.INFANTRY, UnitType.INFANTRY),
+                                     Units(UnitType.INFANTRY), dice=dice).Resolve()
+        self.assertEqual(dice.rolls, [])
+        self.assertEqual(result.winner, combat.ATTACKER)
+        self.assertEqual(len(result.attacker_units), 2)
+
+    def testFightsUntilOneSideIsGone(self):
+        dice = ScriptedDice([1, 1, 1, 9, 1, 1, 1, 10])
+        result = combat.GroundCombat(Units(UnitType.INFANTRY),
+                                     Units(UnitType.INFANTRY, UnitType.INFANTRY),
+                                     dice=dice).Resolve()
+        self.assertEqual(result.winner, combat.DEFENDER)
+        self.assertEqual(len(result.rounds), 3)
+        self.assertEqual(len(result.defender_units), 1)
+
+    def testDoesNotChangeCallersList(self):
+        attackers = Units(UnitType.INFANTRY)
+        combat.GroundCombat(attackers, Units(UnitType.INFANTRY),
+                            dice=ScriptedDice([1, 8])).Resolve()
+        self.assertEqual(len(attackers), 1)
+
+    def testOnlyGroundForcesAllowed(self):
+        for units in (Units(UnitType.FIGHTER), Units(UnitType.PDS)):
+            with self.assertRaises(ValueError):
+                combat.GroundCombat(Units(UnitType.INFANTRY), units)
+
+
 if __name__ == '__main__':
     unittest.main()

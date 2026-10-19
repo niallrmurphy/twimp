@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-# Space combat between two players' ships in one system, following the
-# TI4 rules: anti-fighter barrage, announce retreats, roll, assign hits,
+# Combat between two players, following the TI4 rules.
+#
+# Space combat: anti-fighter barrage, announce retreats, roll, assign hits,
 # retreat, and repeat until one or both sides have no ships.
+# Ground combat: roll, assign hits, and repeat until one or both sides have
+# no ground forces. There is no retreat from ground combat.
 
 import collections
 import dataclasses
@@ -45,29 +48,26 @@ class CombatResult(object):
 
 
 class _Side(object):
-    def __init__(self, name, units, agent, can_retreat):
-        for unit in units:
-            if not unit.IsShip():
-                raise ValueError("Only ships take part in space combat: %r" % unit)
+    def __init__(self, name, units, agent, can_retreat=False):
         self.name = name
         self.units = list(units)
         self.agent = agent
         self.can_retreat = can_retreat
 
-    def HasShips(self):
+    def HasUnits(self):
         return bool(self.units)
 
 
 def TotalDamageCapacity(units):
-    """Total hits a list of ships can absorb, including Sustain Damage."""
-    return sum(u.CanHandleDamage() for u in units if u.IsShip())
+    """Total hits a list of units can absorb, including Sustain Damage."""
+    return sum(u.CanHandleDamage() for u in units)
 
 
 def ApplyAssignment(units, assignment, hits):
-    """Validate and apply a hit assignment to a list of ships, in place.
+    """Validate and apply a hit assignment to a list of units, in place.
 
     Args:
-      units: the ships taking the hits; destroyed ships are removed.
+      units: the units taking the hits; destroyed units are removed.
       assignment: a list of Units, one per hit (see Agent.AssignHits).
       hits: the number of hits that had to be assigned.
     Returns:
@@ -92,43 +92,29 @@ def ApplyAssignment(units, assignment, hits):
     return destroyed
 
 
-class SpaceCombat(object):
-    """One space combat. Call Resolve() to fight it to the end."""
+class _Combat(object):
+    """The round loop shared by space and ground combat."""
 
-    def __init__(self, attacker_units, defender_units,
-                 attacker_agent=None, defender_agent=None, dice=None,
-                 attacker_can_retreat=True, defender_can_retreat=True):
-        # Whether a retreat is possible depends on the board (an adjacent
-        # system without enemy ships), so for now the caller says.
-        self.attacker = _Side(ATTACKER, attacker_units,
-                              attacker_agent or agents_lib.GreedyAgent(),
-                              attacker_can_retreat)
-        self.defender = _Side(DEFENDER, defender_units,
-                              defender_agent or agents_lib.GreedyAgent(),
-                              defender_can_retreat)
+    def __init__(self, attacker, defender, dice):
+        self.attacker = attacker
+        self.defender = defender
         self.dice = dice if dice is not None else dice_lib.Dice()
         self.rounds = []
+
+    def _BothSidesRemain(self):
+        return self.attacker.HasUnits() and self.defender.HasUnits()
 
     def Resolve(self):
         retreated = None
         round_number = 0
-        while self.attacker.HasShips() and self.defender.HasShips():
+        while self._BothSidesRemain():
             round_number += 1
             if round_number > MAX_ROUNDS:
                 raise RuntimeError("Combat did not end after %d rounds" % MAX_ROUNDS)
             report = RoundReport(round_number)
             self.rounds.append(report)
-            if round_number == 1:
-                self._AntiFighterBarrage(report)
-                if not (self.attacker.HasShips() and self.defender.HasShips()):
-                    break
-            retreating = self._AnnounceRetreat(round_number)
-            self._RollAndAssign(report)
-            # A retreat only happens if both sides still have ships.
-            if (retreating is not None and self.attacker.HasShips()
-                    and self.defender.HasShips()):
-                report.retreat = retreating.name
-                retreated = retreating.name
+            retreated = self._Round(report)
+            if retreated is not None:
                 break
         return CombatResult(winner=self._Winner(retreated),
                             retreated=retreated,
@@ -136,15 +122,76 @@ class SpaceCombat(object):
                             defender_units=self.defender.units,
                             rounds=self.rounds)
 
+    def _Round(self, report):
+        """Fight one round; return the name of a side that retreated, if any."""
+        self._RollAndAssign(report)
+        return None
+
     def _Winner(self, retreated):
         if retreated == ATTACKER:
             return DEFENDER
         if retreated == DEFENDER:
             return ATTACKER
-        if self.attacker.HasShips():
+        if self.attacker.HasUnits():
             return ATTACKER
-        if self.defender.HasShips():
+        if self.defender.HasUnits():
             return DEFENDER
+        return None
+
+    def _RollAndAssign(self, report):
+        report.attacker_hits = self._Roll(self.attacker)
+        report.defender_hits = self._Roll(self.defender)
+        report.defender_losses += self._AssignHits(self.defender, report.attacker_hits)
+        report.attacker_losses += self._AssignHits(self.attacker, report.defender_hits)
+
+    def _Roll(self, side):
+        return sum(u.GenerateHits(self.dice) for u in side.units)
+
+    def _AssignHits(self, side, hits):
+        return AssignAndApplyHits(side.units, side.agent, hits)
+
+
+def AssignAndApplyHits(units, agent, hits):
+    """Have an agent assign hits to its units (capped at what they can
+    absorb), then apply them. Returns the destroyed units."""
+    hits = min(hits, TotalDamageCapacity(units))
+    if hits == 0:
+        return []
+    assignment = agent.AssignHits(list(units), hits)
+    return ApplyAssignment(units, assignment, hits)
+
+
+class SpaceCombat(_Combat):
+    """One space combat. Call Resolve() to fight it to the end."""
+
+    def __init__(self, attacker_units, defender_units,
+                 attacker_agent=None, defender_agent=None, dice=None,
+                 attacker_can_retreat=True, defender_can_retreat=True):
+        for unit in list(attacker_units) + list(defender_units):
+            if not unit.IsShip():
+                raise ValueError("Only ships take part in space combat: %r" % unit)
+        # Whether a retreat is possible depends on the board (an adjacent
+        # system without enemy ships), so for now the caller says.
+        super(SpaceCombat, self).__init__(
+            _Side(ATTACKER, attacker_units,
+                  attacker_agent or agents_lib.GreedyAgent(),
+                  attacker_can_retreat),
+            _Side(DEFENDER, defender_units,
+                  defender_agent or agents_lib.GreedyAgent(),
+                  defender_can_retreat),
+            dice)
+
+    def _Round(self, report):
+        if report.round_number == 1:
+            self._AntiFighterBarrage(report)
+            if not self._BothSidesRemain():
+                return None
+        retreating = self._AnnounceRetreat(report.round_number)
+        self._RollAndAssign(report)
+        # A retreat only happens if both sides still have ships.
+        if retreating is not None and self._BothSidesRemain():
+            report.retreat = retreating.name
+            return retreating.name
         return None
 
     def _AntiFighterBarrage(self, report):
@@ -177,18 +224,22 @@ class SpaceCombat(object):
                 return side
         return None
 
-    def _RollAndAssign(self, report):
-        report.attacker_hits = self._Roll(self.attacker)
-        report.defender_hits = self._Roll(self.defender)
-        report.defender_losses += self._AssignHits(self.defender, report.attacker_hits)
-        report.attacker_losses += self._AssignHits(self.attacker, report.defender_hits)
 
-    def _Roll(self, side):
-        return sum(u.GenerateHits(self.dice) for u in side.units)
+class GroundCombat(_Combat):
+    """Ground combat on one planet. The attacker is the active player.
 
-    def _AssignHits(self, side, hits):
-        hits = min(hits, TotalDamageCapacity(side.units))
-        if hits == 0:
-            return []
-        assignment = side.agent.AssignHits(list(side.units), hits)
-        return ApplyAssignment(side.units, assignment, hits)
+    Works on copies of the unit lists; the caller removes the units in
+    each round's losses from the planet.
+    """
+
+    def __init__(self, attacker_units, defender_units,
+                 attacker_agent=None, defender_agent=None, dice=None):
+        for unit in list(attacker_units) + list(defender_units):
+            if not unit.IsGroundForce():
+                raise ValueError("Only ground forces take part in ground combat: %r" % unit)
+        super(GroundCombat, self).__init__(
+            _Side(ATTACKER, attacker_units,
+                  attacker_agent or agents_lib.GreedyAgent()),
+            _Side(DEFENDER, defender_units,
+                  defender_agent or agents_lib.GreedyAgent()),
+            dice)

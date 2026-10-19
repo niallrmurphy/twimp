@@ -14,8 +14,12 @@ from twimp import dice as dice_lib
 from twimp.units import Unit, UnitType
 
 
-def ParseForce(spec):
-    """Parse 'dreadnought=2,carrier' into {UnitType.DREADNOUGHT: 2, UnitType.CARRIER: 1}."""
+def ParseForce(spec, allowed=Unit.IsShip, kind='a ship'):
+    """Parse 'dreadnought=2,carrier' into {UnitType.DREADNOUGHT: 2, UnitType.CARRIER: 1}.
+
+    allowed is a predicate on a Unit; units that fail it are rejected as not
+    being `kind`.
+    """
     force = collections.OrderedDict()
     for part in spec.split(','):
         part = part.strip()
@@ -28,8 +32,8 @@ def ParseForce(spec):
         except KeyError:
             raise ValueError("Unknown unit %r; choose from %s" % (
                 name, ', '.join(t.name.lower() for t in UnitType)))
-        if not Unit(unit_type).IsShip():
-            raise ValueError("%s is not a ship" % unit_type.name.lower())
+        if not allowed(Unit(unit_type)):
+            raise ValueError("%s is not %s" % (unit_type.name.lower(), kind))
         force[unit_type] = force.get(unit_type, 0) + (int(count) if count else 1)
     return force
 

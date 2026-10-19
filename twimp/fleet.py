@@ -116,7 +116,7 @@ class Fleet(object):
 def CalculateTotalDamageCapacity(fleet_obj):
     """Total hits the ships in a fleet can absorb, including Sustain Damage."""
     return combat.TotalDamageCapacity(
-        [u for units in fleet_obj.values() for u in units])
+        [u for units in fleet_obj.values() for u in units if u.IsShip()])
 
 
 if __name__ == '__main__':

@@ -4,6 +4,7 @@ import collections
 import unittest
 
 from twimp import agents
+from twimp import board
 from twimp.units import Unit, UnitType
 
 
@@ -54,6 +55,42 @@ class TestGreedyAgent(unittest.TestCase):
 
     def testNeverRetreats(self):
         self.assertFalse(self.agent.DeclareRetreat([], [], 1))
+
+    def testAssignsHitsToInfantry(self):
+        units = Units(UnitType.INFANTRY, UnitType.INFANTRY)
+        self.assertEqual(len(self.agent.AssignHits(units, 1)), 1)
+
+
+class TestGreedyInvasionChoices(unittest.TestCase):
+    def setUp(self):
+        self.agent = agents.GreedyAgent()
+        self.ours = board.Planet('Ours', 4, 4)
+        self.ours.controller = 'red'
+        self.guarded = board.Planet('Guarded', 4, 4)
+        self.guarded.controller = 'blue'
+        for unit in Units(UnitType.INFANTRY, UnitType.INFANTRY):
+            self.guarded.AddUnit('blue', unit)
+        self.poor = board.Planet('Poor', 0, 1)
+        self.rich = board.Planet('Rich', 3, 1)
+
+    def testCommitsToWeakestRichestPlanetWeDontHold(self):
+        forces = Units(UnitType.INFANTRY, UnitType.INFANTRY)
+        choice = self.agent.CommitGroundForces(
+            'red', forces, [self.ours, self.guarded, self.poor, self.rich])
+        self.assertEqual(choice, {self.rich: forces})
+
+    def testNothingToCommitTo(self):
+        self.assertEqual(self.agent.CommitGroundForces(
+            'red', Units(UnitType.INFANTRY), [self.ours]), {})
+
+    def testBombardsMostDefendedPlanet(self):
+        lightly = board.Planet('Lightly', 1, 1)
+        lightly.AddUnit('blue', Units(UnitType.INFANTRY)[0])
+        bombarders = Units(UnitType.DREADNOUGHT, UnitType.DREADNOUGHT)
+        choice = self.agent.ChooseBombardment('red', bombarders,
+                                              [lightly, self.guarded])
+        self.assertEqual(choice, [(bombarders[0], self.guarded),
+                                  (bombarders[1], self.guarded)])
 
 
 if __name__ == '__main__':
