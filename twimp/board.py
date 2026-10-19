@@ -116,6 +116,8 @@ class System(object):
     # Units in the space area: {player: [Unit, ...]}. Ships, plus any
     # fighters and ground forces they carry.
     self.space = {}
+    # Players with a command token in this system.
+    self.command_tokens = set()
 
   def __repr__(self):
     return "<System %s>" % self.tile_id

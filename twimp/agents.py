@@ -2,7 +2,11 @@
 # Player decision interface. The rules engine never makes a choice a player
 # would make; it asks an Agent.
 
-from twimp.units import UnitType
+import random
+
+from twimp.units import UNIT_STATS, UnitType
+
+MECATOL_REX = 'Mecatol Rex'
 
 
 # Order in which GreedyAgent assigns hits: cheapest losses first, with every
@@ -73,13 +77,54 @@ class Agent(object):
         capacity or ships beyond the fleet pool. Returns a list of Units."""
         raise NotImplementedError
 
+    # Tactical action choices (see tactical.py).
+
+    def ChooseActivation(self, state, player, options):
+        """Choose a system to activate.
+
+        Args:
+          options: {coord: [MoveOption]}: every system we may activate, with
+            the ships that could move into it.
+        Returns:
+          one of the coords.
+        """
+        raise NotImplementedError
+
+    def ChooseMovement(self, state, player, active, options, transportable):
+        """Choose which ships move into the active system, and what they carry.
+
+        Args:
+          options: [MoveOption], one per ship that can reach the active system.
+          transportable: {start coord: [Unit]}, fighters and ground forces each
+            ship could pick up where it starts.
+        Returns:
+          a list of (MoveOption, [cargo units]); each ship and unit at most
+          once, and no more cargo than the ship's capacity.
+        """
+        return []
+
+    def ChooseRetreatSystem(self, state, player, options):
+        """Choose where to retreat to, from a non-empty list of coords."""
+        return options[0]
+
+    def ChooseProduction(self, state, player, coord, context):
+        """Choose units to produce at the active system's space docks.
+
+        Args:
+          context: a tactical.ProductionContext with the limit, budget, and
+            room left in the fleet pool, capacity and reinforcements.
+        Returns:
+          {UnitType: count}.
+        """
+        return {}
+
 
 class GreedyAgent(Agent):
     """Assigns hits to lose as little as possible and never retreats.
 
     Its invasion choices are deliberately simple: bombard the planet with
-    the most enemy ground forces, and land everything on the weakest-held
-    planet we don't control (preferring higher resources plus influence).
+    the most enemy ground forces, land one ground force on each undefended
+    planet we don't control, and send the rest to the weakest defended one.
     """
 
     def ChooseBombardment(self, player, units, planets):
@@ -93,10 +138,88 @@ class GreedyAgent(Agent):
         candidates = [p for p in planets if p.controller != player]
         if not ground_forces or not candidates:
             return {}
-        target = min(candidates, key=lambda p: (
-            sum(len(p.GroundForces(o)) for o in p.OtherPlayers(player)),
-            -(p.resources + p.influence)))
-        return {target: list(ground_forces)}
+
+        def Defenders(p):
+            return sum(len(p.GroundForces(o)) for o in p.OtherPlayers(player))
+
+        candidates.sort(key=lambda p: (Defenders(p), -(p.resources + p.influence)))
+        forces = list(ground_forces)
+        choice = {}
+        # One each on undefended planets, most valuable first...
+        for planet in candidates:
+            if Defenders(planet) == 0 and forces:
+                choice[planet] = [forces.pop(0)]
+        # ...and the rest on the weakest defended planet, or the best one.
+        if forces:
+            defended = [p for p in candidates if Defenders(p) > 0]
+            target = defended[0] if defended else candidates[0]
+            choice.setdefault(target, []).extend(forces)
+        return choice
+
+    # Tactical choices: a simple plan of "take the most valuable planets we
+    # can reach that no enemy ships guard, otherwise build at home".
+
+    def ChooseActivation(self, state, player, options):
+        best, best_score = None, None
+        for coord, movers in options.items():
+            system = state.board.SystemAt(coord)
+            if not movers or system.HasOtherPlayersShips(player):
+                continue
+            if not any(m.ship.capacity_limit for m in movers):
+                continue
+            targets = [p for p in system.planets if p.controller != player
+                       and not (state.custodians and p.name == MECATOL_REX)]
+            if not targets:
+                continue
+            defenders = sum(len(p.GroundForces(o)) for p in targets
+                            for o in p.OtherPlayers(player))
+            score = (sum(p.resources + p.influence for p in targets) - 2 * defenders,
+                     -min(len(m.path.systems) for m in movers))
+            if best_score is None or score > best_score:
+                best, best_score = coord, score
+        if best is not None:
+            return best
+        home = state.HomeSystem(player)
+        if home in options:
+            return home
+        return next(iter(options))
+
+    def ChooseMovement(self, state, player, active, options, transportable):
+        moves = []
+        used = set()
+        # Leave one ground force on each planet we take them from.
+        keep = set()
+        for start in transportable:
+            for planet in state.board.SystemAt(start).planets:
+                keep.update(id(u) for u in planet.GroundForces(player)[:1])
+        for option in sorted(options, key=lambda o: -o.ship.capacity_limit):
+            cargo = []
+            pool = [u for u in transportable.get(option.start, [])
+                    if id(u) not in used and id(u) not in keep]
+            ground = [u for u in pool if u.IsGroundForce()]
+            fighters = [u for u in pool if u.unit_type == UnitType.FIGHTER]
+            for unit in ground + fighters:
+                if len(cargo) == option.ship.capacity_limit:
+                    break
+                cargo.append(unit)
+                used.add(id(unit))
+            moves.append((option, cargo))
+        return moves
+
+    def ChooseProduction(self, state, player, coord, context):
+        """A cruiser if there's room in the fleet pool, then infantry."""
+        choice = {}
+        budget, limit = context.budget, context.limit
+        cruisers_left = context.plastic_room.get(UnitType.CRUISER) or 0
+        if (context.can_produce_ships and context.fleet_room > 0 and cruisers_left > 0
+                and budget >= 2 and limit >= 1):
+            choice[UnitType.CRUISER] = 1
+            budget -= 2
+            limit -= 1
+        infantry = min(limit, budget * 2)
+        if infantry:
+            choice[UnitType.INFANTRY] = infantry
+        return choice
 
     def ChooseUnitsToRemove(self, units, count):
         """Cheapest first; fighters before infantry at the same cost."""
@@ -121,3 +244,103 @@ class GreedyAgent(Agent):
                 assignment.extend([unit] * to_assign)
                 pending[id(unit)] += to_assign
         return assignment
+
+
+class RandomAgent(Agent):
+    """Makes a random legal choice every time. Useful for shaking out bugs:
+    whatever it does, the engine must accept it or the engine is wrong."""
+
+    def __init__(self, seed=None, rng=None):
+        self.rng = rng if rng is not None else random.Random(seed)
+
+    def AssignHits(self, units, hits):
+        pending = {id(u): 0 for u in units}
+        assignment = []
+        while len(assignment) < hits:
+            candidates = [u for u in units if u.CanHandleDamage() > pending[id(u)]]
+            unit = self.rng.choice(candidates)
+            pending[id(unit)] += 1
+            assignment.append(unit)
+        return assignment
+
+    def DeclareRetreat(self, own_units, enemy_units, round_number):
+        return self.rng.random() < 0.15
+
+    def ChooseBombardment(self, player, units, planets):
+        return [(u, self.rng.choice(planets)) for u in units
+                if planets and self.rng.random() < 0.8]
+
+    def CommitGroundForces(self, player, ground_forces, planets):
+        choice = {}
+        for unit in ground_forces:
+            target = self.rng.choice(list(planets) + [None])
+            if target is not None:
+                choice.setdefault(target, []).append(unit)
+        return choice
+
+    def ChooseUnitsToRemove(self, units, count):
+        return self.rng.sample(list(units), count)
+
+    def ChooseActivation(self, state, player, options):
+        with_movers = [c for c, movers in options.items() if movers]
+        if with_movers and self.rng.random() < 0.8:
+            return self.rng.choice(with_movers)
+        return self.rng.choice(list(options))
+
+    def ChooseMovement(self, state, player, active, options, transportable):
+        used = set()
+        moves = []
+        for option in options:
+            if self.rng.random() < 0.3:
+                continue
+            pool = [u for u in transportable.get(option.start, []) if id(u) not in used]
+            self.rng.shuffle(pool)
+            cargo = pool[:self.rng.randint(0, option.ship.capacity_limit)]
+            used.update(id(u) for u in cargo)
+            moves.append((option, cargo))
+        return moves
+
+    def ChooseRetreatSystem(self, state, player, options):
+        return self.rng.choice(options)
+
+    def ChooseProduction(self, state, player, coord, context):
+        choice = {}
+        budget, limit = context.budget, context.limit
+        fleet_room, fighter_room = context.fleet_room, context.fighter_room
+        plastic = dict(context.plastic_room)
+        for _ in range(limit):
+            options = []
+            for unit_type, room in plastic.items():
+                if room is not None and room <= 0:
+                    continue
+                if unit_type == UnitType.INFANTRY:
+                    options.append(unit_type)
+                elif unit_type == UnitType.FIGHTER:
+                    if context.can_produce_ships and fighter_room > 0:
+                        options.append(unit_type)
+                elif context.can_produce_ships and fleet_room > 0:
+                    options.append(unit_type)
+            if not options or self.rng.random() < 0.3:
+                break
+            unit_type = self.rng.choice(options)
+            trial = dict(choice)
+            trial[unit_type] = trial.get(unit_type, 0) + 1
+            if _Cost(trial) > budget:
+                break
+            choice = trial
+            if plastic[unit_type] is not None:
+                plastic[unit_type] -= 1
+            if unit_type == UnitType.FIGHTER:
+                fighter_room -= 1
+            elif unit_type != UnitType.INFANTRY:
+                fleet_room -= 1
+        return choice
+
+
+def _Cost(choice):
+    """Resources needed for {UnitType: count}; fighters and infantry are 1 for 2."""
+    total = 0
+    for unit_type, count in choice.items():
+        stats = UNIT_STATS[unit_type]
+        total += -(-count // stats.units_per_cost) * stats.cost
+    return total

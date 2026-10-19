@@ -13,8 +13,8 @@
 # - Gravity rift: a ship gets +1 move for each gravity rift it moves out of,
 #   and rolls a die each time it does; on 1-3 it is destroyed.
 #
-# Command tokens (which systems a player may move out of) are part of the
-# tactical action, in a later stage.
+# A ship also can't move out of (or so through) a system containing its
+# player's command token; the tactical action passes those as no_pass.
 
 import dataclasses
 from typing import Tuple
@@ -54,8 +54,11 @@ def _CanMoveThrough(system, player):
     return not system.HasOtherPlayersShips(player)
 
 
-def ReachableSystems(board, start, move, player, can_pass_asteroids=False):
+def ReachableSystems(board, start, move, player, can_pass_asteroids=False,
+                     no_pass=()):
     """Every system a ship with `move` starting at `start` can end its move in.
+
+    no_pass: coordinates the ship may end in but not move through.
 
     Returns:
       {coordinates: Path}, using the route with the fewest gravity rift exits
@@ -81,7 +84,7 @@ def ReachableSystems(board, start, move, player, can_pass_asteroids=False):
             if (neighbour not in best
                     or route._Preference() < best[neighbour]._Preference()):
                 best[neighbour] = route
-            if _CanMoveThrough(system, player):
+            if _CanMoveThrough(system, player) and neighbour not in no_pass:
                 Explore(route.systems, remaining, route.rifts_exited)
 
     if move > 0:

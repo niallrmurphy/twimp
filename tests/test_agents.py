@@ -73,11 +73,23 @@ class TestGreedyInvasionChoices(unittest.TestCase):
         self.poor = board.Planet('Poor', 0, 1)
         self.rich = board.Planet('Rich', 3, 1)
 
-    def testCommitsToWeakestRichestPlanetWeDontHold(self):
+    def testOneEachOnUndefendedPlanetsRichestFirst(self):
         forces = Units(UnitType.INFANTRY, UnitType.INFANTRY)
         choice = self.agent.CommitGroundForces(
             'red', forces, [self.ours, self.guarded, self.poor, self.rich])
-        self.assertEqual(choice, {self.rich: forces})
+        self.assertEqual(choice, {self.rich: forces[:1], self.poor: forces[1:]})
+
+    def testRestGoToWeakestDefendedPlanet(self):
+        forces = Units(*[UnitType.INFANTRY] * 5)
+        choice = self.agent.CommitGroundForces(
+            'red', forces, [self.ours, self.guarded, self.rich])
+        self.assertEqual(choice, {self.rich: forces[:1], self.guarded: forces[1:]})
+
+    def testSurplusStaysOnBestUndefendedPlanet(self):
+        forces = Units(*[UnitType.INFANTRY] * 3)
+        choice = self.agent.CommitGroundForces('red', forces, [self.poor, self.rich])
+        self.assertEqual(choice, {self.rich: [forces[0], forces[2]],
+                                  self.poor: [forces[1]]})
 
     def testNothingToCommitTo(self):
         self.assertEqual(self.agent.CommitGroundForces(

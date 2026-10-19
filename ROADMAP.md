@@ -25,7 +25,10 @@ Run the tests from the repo root with `python3 -m unittest`.
 |---|---|
 | `twimp/units.py` | 4e unit data table (`UNIT_STATS`) and a single `Unit` class keyed by `UnitType`. Handles sustain damage, cargo, and combat, AFB, bombardment and space cannon rolls. |
 | `twimp/dice.py` | Seedable `Dice`; every roll goes through an injected instance. |
-| `twimp/agents.py` | The decision interface: `Agent` (`AssignHits`, `DeclareRetreat`, `ChooseBombardment`, `CommitGroundForces`) and `GreedyAgent`, a simple default for all of them. |
+| `twimp/agents.py` | The decision interface: `Agent`, with every choice a player makes. Implemented by `GreedyAgent` (simple sensible play) and `RandomAgent` (random legal play, for shaking out bugs). |
+| `twimp/cli_agent.py` | `CliAgent`: asks a person at the terminal, suggesting the greedy choice each time. |
+| `twimp/tactical.py` | `TakeTacticalAction`: activation, movement, space cannon offense, space combat (with retreats), invasion and production, all validated, with a report. |
+| `twimp/play_turn.py` | CLI: `python3 -m twimp.play_turn --human sol` to play a turn, or `--actions 6` to watch the computer. |
 | `twimp/combat.py` | `SpaceCombat`: the full rules sequence (AFB, retreat announcements, rolls, validated hit assignment, retreat), with a per-round report. `GroundCombat` shares the round loop. |
 | `twimp/simulate_invasion.py` | CLI odds of taking a planet: `python3 -m twimp.simulate_invasion --ships warsun --ground infantry=3 --planet infantry=2,pds --seed 1`. |
 | `twimp/invasion.py` | `Invasion`: bombardment, committing ground forces, space cannon defense, ground combat, establishing control, with a report per planet. |
@@ -41,7 +44,7 @@ Run the tests from the repo root with `python3 -m unittest`.
 | `twimp/movement.py` | Which systems a ship can reach, under the anomaly, wormhole and enemy-ship rules. |
 | `twimp/show_map.py` | CLI: `python3 -m twimp.show_map --from 26 --move 2` draws the map and lists where a ship can go. |
 | `twimp/cards.py` | Empty. |
-| `tests/` | 162 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
+| `tests/` | 192 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
 
 ---
 
@@ -185,29 +188,60 @@ Deferred:
 - Calling the limit checks at the right moments: capacity after combat,
   both after movement and production. That's stage 5's job.
 
-## Stage 5: The tactical action ← **Milestone A**
+## Stage 5: The tactical action ✅ done: **Milestone A**
 
-Wire stages 1–4 together into a single player turn:
+`tactical.TakeTacticalAction(state, player, agents, dice)` runs a full turn:
 
-1. **Activation:** place a tactic token. You can't activate a system that
-   already holds your own token.
-2. **Movement:** choose ships that can reach the system and aren't in systems
-   holding your tokens, then carry fighters and ground forces within capacity.
-3. **Space cannon offense:** PDS in and adjacent to the system fire.
-4. **Space combat** (stage 1).
-5. **Invasion** (stage 2).
-6. **Production:** limit of space dock production (resources + 2), paid by
-   exhausting planets or spending trade goods, within fleet pool and unit limits.
+1. **Activation**: spends a tactic token. You can't activate a system that
+   already has your command token.
+2. **Movement**: offers each ship that can reach the active system, with its
+   route. Ships can't leave (or pass through) systems with their own command
+   token, and Antimass Deflectors lets them cross asteroid fields. Each ship
+   carries up to its capacity in fighters and ground forces, taken from the
+   system it starts in. Ships leaving a gravity rift roll to survive (losing
+   their cargo if they don't). Units left behind without capacity are lost.
+   **Space cannon offense** follows: PDS in the active system fire, starting
+   with the active player.
+3. **Space combat** if another player has ships there. A retreat is only
+   possible to an adjacent system with no enemy ships that holds the
+   player's units or a planet they control, and it places a command token
+   there from reinforcements. Fleet pool and capacity are checked where the
+   retreating ships land. Excess fighters and ground forces are destroyed at
+   the end of the step.
+4. **Invasion**: you can't land on Mecatol Rex while the custodians token
+   is there.
+5. **Production**: each space dock adds its planet's resources + 2 to the
+   production limit. The fleet pool, capacity and reinforcements are
+   checked, war suns need their technology, a blockaded dock can't build
+   ships, and payment wastes as few resources as possible.
 
-- Model each choice as an **action object** that the engine validates and
-  applies, with a function that lists legal moves. This lets a random-legal
-  agent and a CLI human agent use the same code.
-- Agents: `ScriptedAgent` (for tests), `RandomLegalAgent`, and a basic
-  `CliAgent`.
+Players:
+- **`GreedyAgent`** takes the most valuable unguarded planets it can reach
+  with a carrier, leaving one ground force on each planet it takes them from.
+  If there's nothing to take, it builds at home: a cruiser if the fleet pool
+  has room, then infantry.
+- **`RandomAgent`** makes random legal choices.
+- **`CliAgent`** prompts a person, with the greedy choice as the default.
 
-**Done when:** one player moves from their home system, fights a neutral or
-enemy fleet, lands infantry and builds units, all from a seeded test and
-playable from the CLI.
+Testing:
+- Scenario tests are worked die by die: combat, space cannon offense and
+  defense, retreats (including fleet pool overflow at the destination),
+  gravity rifts, the Mecatol custodians, production rules and payment.
+- A random-play test runs games of random agents and checks after every
+  action that no system exceeds capacity or the fleet pool, and that saving
+  and reloading changes nothing. Before it was added, a longer version of this
+  run found three real bugs: stranded units, space cannon fire leaving
+  fighters over capacity, and removing fighters that the space dock was
+  already covering.
+
+Deferred:
+- Picking up units from systems a ship moves through (only the start
+  system for now).
+- PDS II firing into adjacent systems, and other technology effects (stage 7).
+- The "3 free fighters" bonus applies anywhere the player has a space dock.
+  Production is also simplified: everything a dock builds lands on the first
+  dock planet.
+- Space combat with more than two players in one system.
 
 ## Stage 6: The action phase loop
 

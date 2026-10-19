@@ -61,14 +61,27 @@ def _Remove(state, system, player, candidates, count, agent, kind):
     return chosen
 
 
+def _ExcessCandidates(system, player):
+    """Units whose removal reduces capacity excess: ground forces always,
+    fighters only while there are more than the space docks cover."""
+    units = CarriedUnits(system, player)
+    fighters = [u for u in units if u.unit_type == UnitType.FIGHTER]
+    free = FIGHTERS_FREE_PER_SPACE_DOCK * _SpaceDocks(system, player)
+    ground = [u for u in units if u.IsGroundForce()]
+    return ground + (fighters if len(fighters) > free else [])
+
+
 def EnforceCapacity(state, coord, player, agent=None):
     """Destroy fighters and ground forces beyond capacity. Returns them."""
     system = state.board.SystemAt(coord)
-    excess = CapacityExcess(system, player)
-    if not excess:
-        return []
-    return _Remove(state, system, player, CarriedUnits(system, player), excess,
-                   agent or agents_lib.GreedyAgent(), 'capacity_exceeded')
+    agent = agent or agents_lib.GreedyAgent()
+    removed = []
+    # Removing a fighter the space docks were covering doesn't help, so keep
+    # asking until the excess is gone.
+    while CapacityExcess(system, player):
+        removed += _Remove(state, system, player, _ExcessCandidates(system, player),
+                           CapacityExcess(system, player), agent, 'capacity_exceeded')
+    return removed
 
 
 def EnforceFleetPool(state, coord, player, agent=None):

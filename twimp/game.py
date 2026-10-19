@@ -21,6 +21,7 @@ FACTIONS_FILE = os.path.join(os.path.dirname(__file__), 'data', 'factions.json')
 STARTING_TACTIC_TOKENS = 3
 STARTING_FLEET_TOKENS = 3
 STARTING_STRATEGY_TOKENS = 2
+COMMAND_TOKENS_PER_PLAYER = 16
 MAX_PLAYERS = 8
 
 # Game phases, in round order.
@@ -122,6 +123,26 @@ class GameState(object):
     def HomeSystem(self, name):
         """The coordinates of a player's home system."""
         return self.board.Find(self.Player(name).faction_data['home_system'])
+
+    def CommandTokensOnBoard(self, name):
+        return [c for c, s in self.board.systems.items() if name in s.command_tokens]
+
+    def ReinforcementTokens(self, name):
+        """Command tokens neither in the player's pools nor on the board."""
+        p = self.Player(name)
+        return (COMMAND_TOKENS_PER_PLAYER - p.tactic_tokens - p.fleet_tokens
+                - p.strategy_tokens - len(self.CommandTokensOnBoard(name)))
+
+    def UnitsOnBoard(self, name, unit_type):
+        """How many of a player's units of a type are on the board, for
+        plastic limits."""
+        count = 0
+        for system in self.board.systems.values():
+            count += sum(1 for u in system.space.get(name, []) if u.unit_type == unit_type)
+            for planet in system.planets:
+                count += sum(1 for u in planet.units.get(name, [])
+                             if u.unit_type == unit_type)
+        return count
 
 
 def _HomeSlots(board):
@@ -227,6 +248,12 @@ def Summary(state):
             '%s %d/%d%s' % (p.name, p.resources, p.influence,
                             ' (exhausted)' if p.exhausted else '')
             for p in planets))
+    tokens = ['%s: %s' % (s.Label(), ', '.join(sorted(s.command_tokens)))
+              for c in hexes.Spiral(10)
+              for s in [state.board.SystemAt(c)] if s is not None and s.command_tokens]
+    if tokens:
+        lines.append('')
+        lines.append('Command tokens on the board: %s' % '; '.join(tokens))
     lines.append('')
     lines.append('Units:')
     for coord in hexes.Spiral(10):
@@ -286,6 +313,7 @@ def ToDict(state):
         systems.append({
             'q': coord.q, 'r': coord.r, 'tile': system.tile_id,
             'space': _UnitsToDict(system.space),
+            'command_tokens': sorted(system.command_tokens),
             'planets': [{'name': p.name, 'controller': p.controller,
                          'exhausted': p.exhausted,
                          'units': _UnitsToDict(p.units)}
@@ -310,6 +338,7 @@ def FromDict(d):
     for s in d['systems']:
         system = board_lib.MakeSystem(s['tile'])
         system.space = _UnitsFromDict(s['space'])
+        system.command_tokens = set(s.get('command_tokens', []))
         if [p['name'] for p in s['planets']] != [p.name for p in system.planets]:
             raise ValueError("Saved planets don't match tile %s" % s['tile'])
         for planet, saved in zip(system.planets, s['planets']):
