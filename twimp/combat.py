@@ -93,13 +93,26 @@ def ApplyAssignment(units, assignment, hits):
 
 
 class _Combat(object):
-    """The round loop shared by space and ground combat."""
+    """The round loop shared by space and ground combat.
 
-    def __init__(self, attacker, defender, dice):
+    A listener, if given, is called as listener(event, attacker_units=,
+    defender_units=, ...) when the combat starts ('start'), once each round's
+    dice are rolled ('rolled', with report=), after each round ('round', with
+    report=), and when it ends ('end', with result=), so people can follow
+    along.
+    """
+
+    def __init__(self, attacker, defender, dice, listener=None):
         self.attacker = attacker
         self.defender = defender
         self.dice = dice if dice is not None else dice_lib.Dice()
         self.rounds = []
+        self.listener = listener
+
+    def _Emit(self, event, **details):
+        if self.listener:
+            self.listener(event, attacker_units=list(self.attacker.units),
+                          defender_units=list(self.defender.units), **details)
 
     def _BothSidesRemain(self):
         return self.attacker.HasUnits() and self.defender.HasUnits()
@@ -107,6 +120,7 @@ class _Combat(object):
     def Resolve(self):
         retreated = None
         round_number = 0
+        self._Emit('start')
         while self._BothSidesRemain():
             round_number += 1
             if round_number > MAX_ROUNDS:
@@ -114,13 +128,16 @@ class _Combat(object):
             report = RoundReport(round_number)
             self.rounds.append(report)
             retreated = self._Round(report)
+            self._Emit('round', report=report)
             if retreated is not None:
                 break
-        return CombatResult(winner=self._Winner(retreated),
-                            retreated=retreated,
-                            attacker_units=self.attacker.units,
-                            defender_units=self.defender.units,
-                            rounds=self.rounds)
+        result = CombatResult(winner=self._Winner(retreated),
+                              retreated=retreated,
+                              attacker_units=self.attacker.units,
+                              defender_units=self.defender.units,
+                              rounds=self.rounds)
+        self._Emit('end', result=result)
+        return result
 
     def _Round(self, report):
         """Fight one round; return the name of a side that retreated, if any."""
@@ -141,6 +158,8 @@ class _Combat(object):
     def _RollAndAssign(self, report):
         report.attacker_hits = self._Roll(self.attacker)
         report.defender_hits = self._Roll(self.defender)
+        # Let people see the dice before anyone has to assign hits.
+        self._Emit('rolled', report=report)
         report.defender_losses += self._AssignHits(self.defender, report.attacker_hits)
         report.attacker_losses += self._AssignHits(self.attacker, report.defender_hits)
 
@@ -166,7 +185,7 @@ class SpaceCombat(_Combat):
 
     def __init__(self, attacker_units, defender_units,
                  attacker_agent=None, defender_agent=None, dice=None,
-                 attacker_can_retreat=True, defender_can_retreat=True):
+                 attacker_can_retreat=True, defender_can_retreat=True, listener=None):
         for unit in list(attacker_units) + list(defender_units):
             if not unit.IsShip():
                 raise ValueError("Only ships take part in space combat: %r" % unit)
@@ -179,7 +198,7 @@ class SpaceCombat(_Combat):
             _Side(DEFENDER, defender_units,
                   defender_agent or agents_lib.GreedyAgent(),
                   defender_can_retreat),
-            dice)
+            dice, listener)
 
     def _Round(self, report):
         if report.round_number == 1:
@@ -233,7 +252,7 @@ class GroundCombat(_Combat):
     """
 
     def __init__(self, attacker_units, defender_units,
-                 attacker_agent=None, defender_agent=None, dice=None):
+                 attacker_agent=None, defender_agent=None, dice=None, listener=None):
         for unit in list(attacker_units) + list(defender_units):
             if not unit.IsGroundForce():
                 raise ValueError("Only ground forces take part in ground combat: %r" % unit)
@@ -242,4 +261,4 @@ class GroundCombat(_Combat):
                   attacker_agent or agents_lib.GreedyAgent()),
             _Side(DEFENDER, defender_units,
                   defender_agent or agents_lib.GreedyAgent()),
-            dice)
+            dice, listener)

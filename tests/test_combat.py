@@ -198,6 +198,34 @@ class TestSpaceCombat(unittest.TestCase):
                                    [cruiser, cruiser], 2)
 
 
+class TestListener(unittest.TestCase):
+    def testSpaceCombatEvents(self):
+        events = []
+
+        def Listen(event, attacker_units, defender_units, **details):
+            events.append((event, len(attacker_units), len(defender_units),
+                           sorted(details)))
+
+        dice = ScriptedDice([9, 9,      # AFB: the destroyer kills both fighters
+                             7, 1,      # R1: cruiser hits; destroyer misses
+                             ])
+        combat.SpaceCombat(Units(UnitType.CRUISER, UnitType.FIGHTER, UnitType.FIGHTER),
+                           Units(UnitType.DESTROYER), dice=dice, listener=Listen).Resolve()
+        self.assertEqual(events, [
+            ('start', 3, 1, []),
+            ('rolled', 1, 1, ['report']),    # fighters already gone to the barrage
+            ('round', 1, 0, ['report']),
+            ('end', 1, 0, ['result']),
+        ])
+
+    def testGroundCombatEvents(self):
+        kinds = []
+        combat.GroundCombat(Units(UnitType.INFANTRY), Units(UnitType.INFANTRY),
+                            dice=ScriptedDice([1, 1, 8, 1]),
+                            listener=lambda event, **_: kinds.append(event)).Resolve()
+        self.assertEqual(kinds, ['start', 'rolled', 'round', 'rolled', 'round', 'end'])
+
+
 class TestGroundCombat(unittest.TestCase):
     def testInfantryHitOnEight(self):
         dice = ScriptedDice([8, 7, 1])

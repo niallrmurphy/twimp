@@ -58,7 +58,7 @@ class Invasion(object):
     """One invasion by the active player. Call Resolve() to run every step."""
 
     def __init__(self, active_player, ships, ground_forces, planets,
-                 agents=None, dice=None):
+                 agents=None, dice=None, listener=None):
         """
         Args:
           active_player: the invading player.
@@ -67,6 +67,8 @@ class Invasion(object):
           planets: the system's planets (twimp.board.Planet).
           agents: {player: Agent}; any player not listed uses GreedyAgent.
           dice: a twimp.dice.Dice.
+          listener: passed to each ground combat (see combat._Combat), with
+            planet=, attacker= and defender= added.
         """
         for unit in ground_forces:
             if not unit.IsGroundForce():
@@ -77,6 +79,7 @@ class Invasion(object):
         self.planets = list(planets)
         self.agents = agents or {}
         self.dice = dice if dice is not None else dice_lib.Dice()
+        self.listener = listener
         self.reports = [PlanetReport(p) for p in self.planets]
 
     def _Agent(self, player):
@@ -186,12 +189,17 @@ class Invasion(object):
             defender = self._Defender(planet)
             if defender is None or not planet.GroundForces(self.active_player):
                 continue
+            listener = None
+            if self.listener:
+                def listener(event, planet=planet, defender=defender, **details):
+                    self.listener(event, planet=planet.name, attacker=self.active_player,
+                                  defender=defender, **details)
             result = combat.GroundCombat(
                 planet.GroundForces(self.active_player),
                 planet.GroundForces(defender),
                 attacker_agent=self._Agent(self.active_player),
                 defender_agent=self._Agent(defender),
-                dice=self.dice).Resolve()
+                dice=self.dice, listener=listener).Resolve()
             for round_report in result.rounds:
                 planet.RemoveUnits(self.active_player, round_report.attacker_losses)
                 planet.RemoveUnits(defender, round_report.defender_losses)

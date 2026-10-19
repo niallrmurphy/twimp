@@ -166,13 +166,18 @@ def RetreatOptions(state, player, coord):
 
 # The action.
 
-def TakeTacticalAction(state, player, agents=None, dice=None):
-    """Run one tactical action for `player`. Returns a TacticalReport."""
+def TakeTacticalAction(state, player, agents=None, dice=None, listener=None):
+    """Run one tactical action for `player`. Returns a TacticalReport.
+
+    listener, if given, follows each combat as it happens (see
+    combat._Combat), with kind= ('space' or 'ground'), system= (its label),
+    attacker= and defender= added, and planet= for ground combat.
+    """
     agents = dict(agents or {})
     for p in state.players:
         agents.setdefault(p.name, agents_lib.GreedyAgent())
     dice = dice if dice is not None else dice_lib.Dice()
-    turn = _Turn(state, player, agents, dice)
+    turn = _Turn(state, player, agents, dice, listener)
     turn.Activate()
     turn.Move()
     turn.SpaceCannonOffense()
@@ -183,17 +188,27 @@ def TakeTacticalAction(state, player, agents=None, dice=None):
 
 
 class _Turn(object):
-    def __init__(self, state, player, agents, dice):
+    def __init__(self, state, player, agents, dice, listener=None):
         self.state = state
         self.player = player
         self.agents = agents
         self.dice = dice
+        self.listener = listener
         self.report = None
         self.active = None
 
     @property
     def system(self):
         return self.state.board.SystemAt(self.active)
+
+    def _Listener(self, **context):
+        """A combat listener that adds where (and what) the combat is."""
+        if not self.listener:
+            return None
+
+        def Listen(event, **details):
+            self.listener(event, system=self.system.Label(), **dict(context, **details))
+        return Listen
 
     def _Agent(self, player):
         return self.agents[player]
@@ -316,7 +331,9 @@ class _Turn(object):
             attacker_agent=self._Agent(self.player), defender_agent=self._Agent(defender),
             dice=self.dice,
             attacker_can_retreat=bool(retreats[self.player]),
-            defender_can_retreat=bool(retreats[defender])).Resolve()
+            defender_can_retreat=bool(retreats[defender]),
+            listener=self._Listener(kind='space', attacker=self.player,
+                                    defender=defender)).Resolve()
         for p, survivors in ((self.player, result.attacker_units),
                              (defender, result.defender_units)):
             others_in_space = [u for u in self.system.UnitsInSpace(p) if not u.IsShip()]
@@ -361,7 +378,8 @@ class _Turn(object):
             return
         before = {p.name: p.controller for p in planets}
         result = invasion_lib.Invasion(self.player, ships, ground, planets,
-                                       agents=self.agents, dice=self.dice).Resolve()
+                                       agents=self.agents, dice=self.dice,
+                                       listener=self._Listener(kind='ground')).Resolve()
         self.system.space[self.player] = ships + result.ground_forces_in_space
         self.report.invasion = result
         for planet in planets:

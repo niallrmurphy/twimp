@@ -30,6 +30,8 @@ Run the tests from the repo root with `python3 -m unittest`.
 | `twimp/tactical.py` | `TakeTacticalAction`: activation, movement, space cannon offense, space combat (with retreats), invasion and production, all validated, with a report. |
 | `twimp/play_turn.py` | CLI: `python3 -m twimp.play_turn --human sol --rounds 3`, or `--actions 6` to watch the computer. |
 | `twimp/rounds.py` | `PlayRound`: the action phase (act or pass until all pass) and a cut-down status phase. |
+| `twimp/decisions.py` | Every agent choice as a JSON-friendly decision with a default and a validating parser. |
+| `twimp/server.py`, `twimp/web/` | The web UI: `python3 -m twimp.server`, then open http://localhost:8000/. |
 | `twimp/combat.py` | `SpaceCombat`: the full rules sequence (AFB, retreat announcements, rolls, validated hit assignment, retreat), with a per-round report. `GroundCombat` shares the round loop. |
 | `twimp/simulate_invasion.py` | CLI odds of taking a planet: `python3 -m twimp.simulate_invasion --ships warsun --ground infantry=3 --planet infantry=2,pds --seed 1`. |
 | `twimp/invasion.py` | `Invasion`: bombardment, committing ground forces, space cannon defense, ground combat, establishing control, with a report per planet. |
@@ -45,7 +47,7 @@ Run the tests from the repo root with `python3 -m unittest`.
 | `twimp/movement.py` | Which systems a ship can reach, under the anomaly, wormhole and enemy-ship rules. |
 | `twimp/show_map.py` | CLI: `python3 -m twimp.show_map --from 26 --move 2` draws the map and lists where a ship can go. |
 | `twimp/cards.py` | Empty. |
-| `tests/` | 210 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
+| `tests/` | 235 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
 
 ---
 
@@ -265,21 +267,52 @@ Deferred:
   afford it. It's still passive: it never attacks.
 - CLI: `python3 -m twimp.play_turn --human sol --rounds 3`.
 
-## Stage 6W: Web UI, first version
+## Stage 6W: Web UI, first version ✅ done
 
-- Several browsers can play one game: whoever creates the game gets a link
-  for each human seat, and the computer plays the others.
-- No dependencies: Python's built-in HTTP server, plus a single page with an
-  SVG map and plain JavaScript. Browsers poll for updates.
-- Every agent choice becomes a structured *decision* (pick a system, pick
-  units, enter counts, yes/no). The server shows the decision to the right
-  seat, validates the answer, and passes it back to the engine, which waits
-  in its own thread. The greedy choice is offered as the default.
-- The page shows the map (clickable when choosing a system), players,
-  the current decision and the game log.
+- `python3 -m twimp.server` (add `--host 0.0.0.0` for other machines) serves
+  a lobby. Choose factions and which seats people play, and each human
+  seat gets a private link; anyone can watch with the plain game link.
+- **Decisions** (`twimp/decisions.py`): `DecisionAgent` turns each agent
+  method into a structured decision with JSON options, the greedy default
+  and a validating parser. A test plays whole games answering only with
+  defaults and checks they match greedy play exactly.
+- **Server:** each game's engine runs in its own thread under one lock. A
+  `WebAgent` waits while its seat decides, and browsers poll (a cheap
+  "unchanged" reply when nothing happened) and post answers. Answers are
+  checked for seat, question id and validity. A failed check gets a message
+  and the question is asked again.
+- **Page** (plain JavaScript and SVG, no build): the map shows planets,
+  controllers, units, command tokens and home systems, with clickable
+  systems when activating or retreating. There's a form for every decision
+  with the greedy choice filled in, a players table, the game log, and a
+  save download.
+  - A legend gives each player's colour and faction. A solid edge marks a
+    home system; a dashed edge marks a system where one player holds every
+    planet.
+  - Hovering over a planet, unit summary (`IN1 SD1`) or command token
+    explains it in full.
+  - Log entries are numbered, and the numbers only ever go up.
+- **Battle overlay:** combat reports its progress as it happens
+  (`listener` on `SpaceCombat`/`GroundCombat`, passed through the tactical
+  action and invasion). Every viewer sees a window for each fight: both
+  sides' starting and current forces, each round's barrage and hits (shown
+  as soon as the dice are rolled), losses, retreats and the result. The
+  players fighting make their combat decisions (assigning hits, retreating,
+  choosing where to retreat to) in that window. Closed battles stay closed
+  across a page reload.
+- Games can be created with a custom `map` string over the API, which is
+  handy for setting up scenarios.
+- Tested over real HTTP: two human seats each see only their own questions,
+  wrong seats and stale or invalid answers are refused, and a computer-only
+  game runs to the end. The page was checked by hand in a browser,
+  including at phone width.
 
-**Done when:** two browsers can play a multi-round game against computer
-players.
+Known gaps:
+- Games live in memory. Restarting the server ends them, and a game only
+  carries on once the person being asked returns to their link.
+- No way yet to resume a downloaded save in the browser. `play_turn --load`
+  works.
+- The map text is small. Zooming and better unit icons would help.
 
 ## Stage 7: The strategy phase and strategy cards
 

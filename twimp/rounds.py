@@ -52,11 +52,12 @@ def NextToAct(state, after=None):
     return None
 
 
-def PlayActionPhase(state, agents=None, dice=None, observer=None):
+def PlayActionPhase(state, agents=None, dice=None, observer=None, listener=None):
     """Players take turns until everyone has passed.
 
     observer, if given, is called as observer(kind, **details) after each
-    turn: ('tactical', player=, report=) or ('pass', player=).
+    turn: ('tactical', player=, report=) or ('pass', player=). listener
+    follows combats as they happen (see tactical.TakeTacticalAction).
     Returns the winner's name if someone reached the target, else None.
     """
     agents = _Agents(state, agents)
@@ -76,7 +77,7 @@ def PlayActionPhase(state, agents=None, dice=None, observer=None):
             if observer:
                 observer(PASS, player=player)
         else:
-            report = tactical.TakeTacticalAction(state, player, agents, dice)
+            report = tactical.TakeTacticalAction(state, player, agents, dice, listener)
             if observer:
                 observer(TACTICAL, player=player, report=report)
             if state.Winner():
@@ -118,14 +119,14 @@ def PlayStatusPhase(state, agents=None):
     state.passed = set()
 
 
-def PlayRound(state, agents=None, dice=None, observer=None):
+def PlayRound(state, agents=None, dice=None, observer=None, listener=None):
     """Play one round. Returns the winner's name if the game ended."""
     agents = _Agents(state, agents)
     state.Log('round_started', round=state.round_number)
     if state.phase == game_lib.STRATEGY:
         state.Log('phase_skipped', phase=game_lib.STRATEGY,
                   reason='no strategy cards yet')
-    winner = PlayActionPhase(state, agents, dice, observer)
+    winner = PlayActionPhase(state, agents, dice, observer, listener)
     if winner:
         return winner
     PlayStatusPhase(state, agents)

@@ -242,6 +242,31 @@ class TestCombatAndInvasion(TacticalTest):
         self.assertEqual(self.System(MECATOL).planets[0].controller, 'sol')
 
 
+class TestListener(TacticalTest):
+    def testCombatsReportWhereAndWho(self):
+        lodor = self.System(LODOR)
+        lodor.AddUnit('letnev', Unit(UnitType.DESTROYER))
+        lodor.planets[0].controller = 'letnev'
+        lodor.planets[0].AddUnit('letnev', Unit(INF))
+        heard = []
+
+        def Listen(event, **details):
+            if event == 'start':
+                heard.append({k: details.get(k) for k in
+                              ('kind', 'system', 'planet', 'attacker', 'defender')})
+
+        dice = ScriptedDice([9, 1, 1,      # space combat: sol's carrier hits
+                             8, 1, 1])     # ground combat: sol hits, letnev misses
+        tactical.TakeTacticalAction(
+            self.state, 'sol', {'sol': Scripted(activate=LODOR, move=CarrierAndDestroyer())},
+            dice, listener=Listen)
+        self.assertEqual(heard, [
+            {'kind': 'space', 'system': '26a', 'planet': None,
+             'attacker': 'sol', 'defender': 'letnev'},
+            {'kind': 'ground', 'system': '26a', 'planet': 'Lodor',
+             'attacker': 'sol', 'defender': 'letnev'}])
+
+
 class TestProduction(TacticalTest):
     def testProduceAtHome(self):
         report = self.Act(sol=Scripted(activate=SOL_HOME, produce={INF: 4, FTR: 2}))
