@@ -31,9 +31,13 @@ Run the tests from the repo root with `python3 -m unittest`.
 | `twimp/invasion.py` | `Invasion`: bombardment, committing ground forces, space cannon defense, ground combat, establishing control, with a report per planet. |
 | `twimp/simulate.py` | CLI odds calculator: `python3 -m twimp.simulate dreadnought=2,carrier,fighter=3 destroyer=6 --seed 1`. |
 | `twimp/fleet.py` | Older two-sided `Fleet`: building against a budget and plastic limits, plus simple attack rounds. Its damage handling now goes through `GreedyAgent`. |
-| `twimp/board.py` | `Planet` has a controller, an exhausted flag, and each player's ground forces and structures. `Hex` has no geometry yet. |
+| `twimp/hexes.py` | Axial hex coordinates: neighbours, distance, rings in map-string order. |
+| `twimp/board.py` | `Planet` (controller, exhausted, trait, tech specialty, units), `System` (one tile: planets, wormholes, anomaly, units in space), and `Board` (systems on the grid, loaded from a map string, with wormhole adjacency and a text render). |
+| `twimp/data/tiles.json` | Base-game tiles 1–50. |
+| `twimp/movement.py` | Which systems a ship can reach, under the anomaly, wormhole and enemy-ship rules. |
+| `twimp/show_map.py` | CLI: `python3 -m twimp.show_map --from 26 --move 2` draws the map and lists where a ship can go. |
 | `twimp/cards.py` | Empty. |
-| `tests/` | 102 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
+| `tests/` | 131 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
 
 ---
 
@@ -108,26 +112,37 @@ Deferred:
 - Players are plain strings until stage 4 brings `Player`.
 - Mechs, and other PoK units, are out of scope.
 
-## Stage 3: The galaxy
+## Stage 3: The galaxy ✅ done
 
-Goal: a real map with positions, adjacency and movement legality.
+- Hex geometry in axial coordinates for flat-topped tiles. Rings run
+  clockwise from due north, the order map strings use.
+- Tile data for base-game tiles 1–50 in `twimp/data/tiles.json`, checked
+  planet by planet against [KeeganW/ti4](https://github.com/KeeganW/ti4). Two
+  differences, both deliberate: Maaluuk is 0/2 here (that file has 2/0), and
+  Resculon is spelled as on the card. The Maaluuk value is worth confirming
+  against a physical card.
+- `Board.FromMapString` loads space-separated tile ids ring by ring, with
+  Mecatol Rex in the centre unless an explicit `{tile}` is given. `0` leaves
+  a gap. A sample 6-player map is in `board.SAMPLE_MAP`.
+- Adjacency includes matching wormholes (alpha–alpha, beta–beta).
+- `movement.ReachableSystems` gives every legal destination and the route
+  there, preferring routes with fewer gravity rift rolls, then shorter ones:
+  - supernovas and asteroid fields can't be entered (asteroids can be, with
+    an Antimass Deflectors flag);
+  - a nebula can be entered but not moved through, and a ship starting in
+    one has move 1;
+  - each gravity rift moved out of gives +1 move, and the route records the
+    roll it costs (`SurvivesGravityRift` destroys on 1–3);
+  - systems with other players' ships can be ended in but not moved through.
+- `python3 -m twimp.show_map` draws the map as text and shows a ship's reach.
 
-- Hex geometry using axial/cube coordinates: neighbours, distance, rings.
-- Tile data as a data file: base-game system tiles 18–50 and home systems,
-  with planets (resources, influence, trait, tech specialty), wormholes and
-  anomalies. Mecatol Rex at the centre.
-- Load a fixed map from a "tile string" (the space-separated tile-ID format
-  used by community map tools). Random generation can wait.
-- Adjacency includes matching alpha/beta wormholes.
-- Anomaly movement rules: supernova and asteroid field impassable, nebula
-  stops movement and gives defenders +1, gravity rift gives +1 move and can
-  destroy ships passing through.
-- Pathfinding: given a ship's move value and the board, find which systems it
-  can reach. It can't move through systems containing enemy ships.
-- An ASCII board display, good enough to debug with.
-
-**Done when:** tests on a known map give the correct reachable systems for each
-unit type, including wormhole and anomaly cases.
+Deferred:
+- The Creuss delta wormhole: tile 17 has it, but the Creuss home system (51)
+  isn't in the data yet. That comes with factions (stage 4).
+- Rules that depend on whose turn it is: command tokens blocking movement,
+  and the active system as the only legal destination (stage 5).
+- Retreat destinations (stage 5), now that adjacency exists.
+- Random map generation, and PoK hyperlanes.
 
 ## Stage 4: Players and game state
 
