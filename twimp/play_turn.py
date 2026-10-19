@@ -5,9 +5,12 @@ Usage:
   python3 -m twimp.play_turn --human sol            # you play Sol's turn
   python3 -m twimp.play_turn --actions 6 --seed 2   # watch six computer turns
   python3 -m twimp.play_turn --load game.json --human letnev --save game.json
+  python3 -m twimp.play_turn --human sol --rounds 3   # play whole rounds
 
 Players take one tactical action each, in seat order starting with the
-speaker, for --actions actions in total. Players not listed in --human are
+speaker, for --actions actions in total. With --rounds, whole rounds are
+played instead: everyone acts or passes until all have passed, then the
+status phase. Players not listed in --human are
 played by the computer (--agent greedy or random). At each prompt, pressing
 Enter accepts the suggestion shown in brackets.
 """
@@ -20,6 +23,7 @@ from twimp import cli_agent
 from twimp import dice as dice_lib
 from twimp import game
 from twimp import game_cli
+from twimp import rounds
 from twimp import tactical
 
 
@@ -41,6 +45,8 @@ def main(argv=None, input_fn=input, print_fn=print):
                         help='how the computer plays (default: greedy)')
     parser.add_argument('--actions', type=int, default=1,
                         help='tactical actions to play (default 1)')
+    parser.add_argument('--rounds', type=int, default=None,
+                        help='play this many whole rounds instead')
     parser.add_argument('--seed', type=int, default=None,
                         help='for the speaker, the dice and random agents')
     parser.add_argument('--quiet', action='store_true',
@@ -74,6 +80,10 @@ def main(argv=None, input_fn=input, print_fn=print):
             players[name] = agents.GreedyAgent()
     dice = dice_lib.Dice(seed=args.seed)
 
+    if args.rounds:
+        PlayRounds(state, players, dice, args.rounds, print_fn)
+        return Finish(state, args, print_fn)
+
     order = SeatOrderFromSpeaker(state)
     taken = 0
     while taken < args.actions:
@@ -88,6 +98,28 @@ def main(argv=None, input_fn=input, print_fn=print):
             print_fn('')
             print_fn(tactical.DescribeReport(state, report).rstrip('\n'))
             taken += 1
+    return Finish(state, args, print_fn)
+
+
+def PlayRounds(state, players, dice, count, print_fn):
+    def Observe(kind, player, report=None):
+        print_fn('')
+        if kind == rounds.PASS:
+            print_fn('%s passes.' % player)
+        else:
+            print_fn(tactical.DescribeReport(state, report).rstrip('\n'))
+
+    for _ in range(count):
+        print_fn('')
+        print_fn('=== Round %d ===' % state.round_number)
+        winner = rounds.PlayRound(state, players, dice, Observe)
+        if winner:
+            print_fn('')
+            print_fn('%s wins!' % winner)
+            break
+
+
+def Finish(state, args, print_fn):
     if not args.quiet:
         print_fn('')
         print_fn(state.board.Render().rstrip('\n'))

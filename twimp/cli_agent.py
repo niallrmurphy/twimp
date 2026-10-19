@@ -6,7 +6,7 @@
 
 from twimp import agents
 from twimp import game as game_lib
-from twimp.units import UNIT_STATS, Category, UnitType
+from twimp.units import UnitType
 
 
 class CliAgent(agents.Agent):
@@ -167,6 +167,52 @@ class CliAgent(agents.Agent):
         return self._Ask('  Which? [Enter: %s] ' % self._DescribeAssignment(units, default),
                          Parse, default)
 
+    # Rounds.
+
+    def ChooseAction(self, state, player, options):
+        default = self.suggest.ChooseAction(state, player, options)
+        p = state.Player(player)
+        self._Header('Round %d, your turn. Tokens: %d tactic, %d fleet, %d strategy.' % (
+            state.round_number, p.tactic_tokens, p.fleet_tokens, p.strategy_tokens))
+
+        def Parse(text):
+            for option in options:
+                if option.startswith(text.lower()):
+                    return option
+            raise ValueError('Choose one of: %s' % ', '.join(options))
+
+        return self._Ask('  %s? [Enter: %s] ' % (' or '.join(options), default),
+                         Parse, default)
+
+    def ChooseRemoveCustodians(self, state, player, cost):
+        def Parse(text):
+            if text.lower() in ('y', 'yes'):
+                return True
+            if text.lower() in ('n', 'no'):
+                return False
+            raise ValueError('Answer y or n')
+
+        self._Header('Mecatol Rex: spend %d influence to remove the custodians token '
+                     'and score 1 victory point, so your ground forces can land?' % cost)
+        return self._Ask('  [Y/n] ', Parse, True)
+
+    def ChooseCommandTokens(self, state, player, total):
+        default = self.suggest.ChooseCommandTokens(state, player, total)
+        self._Header('Status phase: split your %d command tokens between tactic, fleet '
+                     'and strategy pools.' % total)
+
+        def Parse(text):
+            parts = text.replace(',', ' ').split()
+            if len(parts) != 3 or not all(x.isdigit() for x in parts):
+                raise ValueError('Enter three numbers')
+            split = tuple(int(x) for x in parts)
+            if sum(split) != total:
+                raise ValueError('They must add up to %d' % total)
+            return split
+
+        return self._Ask('  Tactic fleet strategy? [Enter: %d %d %d] ' % default,
+                         Parse, default)
+
     # The tactical action.
 
     def ChooseActivation(self, state, player, options):
@@ -288,27 +334,4 @@ def _DescribeChoice(choice):
     return ', '.join('%s=%d' % (t.name.lower(), n) for t, n in choice.items() if n)
 
 
-def _ProductionProblem(choice, context):
-    """Why a production choice isn't allowed, or None. Mirrors the engine's
-    checks so a person gets asked again rather than an error."""
-    total = sum(choice.values())
-    if total > context.limit:
-        return 'That is %d units; the limit is %d' % (total, context.limit)
-    cost = agents._Cost(choice)
-    if cost > context.budget:
-        return 'That costs %d; you have %d' % (cost, context.budget)
-    ships = sum(n for t, n in choice.items()
-                if UNIT_STATS[t].category == Category.SHIP and t != UnitType.FIGHTER)
-    fighters = choice.get(UnitType.FIGHTER, 0)
-    if (ships or fighters) and not context.can_produce_ships:
-        return "A blockaded space dock can't produce ships"
-    if ships > context.fleet_room:
-        return 'Only room for %d more non-fighter ship(s) in the fleet pool' % context.fleet_room
-    new_capacity = sum(UNIT_STATS[t].capacity * n for t, n in choice.items())
-    if fighters > context.fighter_room + new_capacity:
-        return 'Only room for %d more fighter(s)' % (context.fighter_room + new_capacity)
-    for t, n in choice.items():
-        room = context.plastic_room[t]
-        if room is not None and n > room:
-            return 'Only %d %s left in reinforcements' % (room, t.name.lower())
-    return None
+_ProductionProblem = agents.ProductionProblem

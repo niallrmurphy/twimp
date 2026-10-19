@@ -6,7 +6,7 @@ dropped rather than maintained in parallel.
 
 Two milestones define "a turn end-to-end":
 
-- **Milestone A (stage 5):** one player takes a complete *tactical action*:
+- **Milestone A (stage 5, done):** one player takes a complete *tactical action*:
   activate a system, move, space cannon, space combat, invasion, production.
 - **Milestone B (stage 9):** a full *game round* (strategy, action, status and
   agenda phases) played by scripted or random-legal players, reproducible from
@@ -28,7 +28,8 @@ Run the tests from the repo root with `python3 -m unittest`.
 | `twimp/agents.py` | The decision interface: `Agent`, with every choice a player makes. Implemented by `GreedyAgent` (simple sensible play) and `RandomAgent` (random legal play, for shaking out bugs). |
 | `twimp/cli_agent.py` | `CliAgent`: asks a person at the terminal, suggesting the greedy choice each time. |
 | `twimp/tactical.py` | `TakeTacticalAction`: activation, movement, space cannon offense, space combat (with retreats), invasion and production, all validated, with a report. |
-| `twimp/play_turn.py` | CLI: `python3 -m twimp.play_turn --human sol` to play a turn, or `--actions 6` to watch the computer. |
+| `twimp/play_turn.py` | CLI: `python3 -m twimp.play_turn --human sol --rounds 3`, or `--actions 6` to watch the computer. |
+| `twimp/rounds.py` | `PlayRound`: the action phase (act or pass until all pass) and a cut-down status phase. |
 | `twimp/combat.py` | `SpaceCombat`: the full rules sequence (AFB, retreat announcements, rolls, validated hit assignment, retreat), with a per-round report. `GroundCombat` shares the round loop. |
 | `twimp/simulate_invasion.py` | CLI odds of taking a planet: `python3 -m twimp.simulate_invasion --ships warsun --ground infantry=3 --planet infantry=2,pds --seed 1`. |
 | `twimp/invasion.py` | `Invasion`: bombardment, committing ground forces, space cannon defense, ground combat, establishing control, with a report per planet. |
@@ -44,7 +45,7 @@ Run the tests from the repo root with `python3 -m unittest`.
 | `twimp/movement.py` | Which systems a ship can reach, under the anomaly, wormhole and enemy-ship rules. |
 | `twimp/show_map.py` | CLI: `python3 -m twimp.show_map --from 26 --move 2` draws the map and lists where a ship can go. |
 | `twimp/cards.py` | Empty. |
-| `tests/` | 192 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
+| `tests/` | 210 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
 
 ---
 
@@ -243,15 +244,42 @@ Deferred:
   dock planet.
 - Space combat with more than two players in one system.
 
-## Stage 6: The action phase loop
+## Stage 6: Playable rounds (pulled forward) ✅ done
 
-- The other action types: **pass**, **strategic action** (needs stage 7) and
-  **component action** (stub it until cards exist).
-- Players act one at a time in initiative order until everyone has passed.
-- Claiming Mecatol Rex: spend 6 influence to remove the custodians token and
-  gain 1 victory point. This unlocks the agenda phase.
+- **Action phase** (`rounds.PlayActionPhase`): players take turns in seat
+  order from the speaker, standing in for initiative order. On each turn a
+  player takes a tactical action or passes, until all have passed. Players
+  who have passed are saved with the game.
+- **Mecatol Rex:** before ground forces land there while the custodians
+  token is on it, the player may spend 6 influence (`PayInfluence`) to
+  remove it, scoring 1 victory point. Victory points are tracked, and 10
+  wins.
+- **Cut-down status phase:** command tokens are removed from the board.
+  Each player gains 2 from reinforcements (fewer if they don't have them)
+  and redistributes their pools; a smaller fleet pool removes excess ships.
+  Planets are readied and units repaired.
+- **`rounds.PlayRound`** plays a full round. The strategy and agenda phases
+  are skipped (and logged) until they exist.
+- The greedy player passes rather than waste tokens, avoids gravity rift
+  routes, mostly takes tactic tokens, and goes for Mecatol Rex when it can
+  afford it. It's still passive: it never attacks.
+- CLI: `python3 -m twimp.play_turn --human sol --rounds 3`.
 
-**Done when:** several players alternate tactical actions until all pass.
+## Stage 6W: Web UI, first version
+
+- Several browsers can play one game: whoever creates the game gets a link
+  for each human seat, and the computer plays the others.
+- No dependencies: Python's built-in HTTP server, plus a single page with an
+  SVG map and plain JavaScript. Browsers poll for updates.
+- Every agent choice becomes a structured *decision* (pick a system, pick
+  units, enter counts, yes/no). The server shows the decision to the right
+  seat, validates the answer, and passes it back to the engine, which waits
+  in its own thread. The greedy choice is offered as the default.
+- The page shows the map (clickable when choosing a system), players,
+  the current decision and the game log.
+
+**Done when:** two browsers can play a multi-round game against computer
+players.
 
 ## Stage 7: The strategy phase and strategy cards
 

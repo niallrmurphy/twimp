@@ -22,6 +22,7 @@ STARTING_TACTIC_TOKENS = 3
 STARTING_FLEET_TOKENS = 3
 STARTING_STRATEGY_TOKENS = 2
 COMMAND_TOKENS_PER_PLAYER = 16
+VICTORY_POINTS_TO_WIN = 10
 MAX_PLAYERS = 8
 
 # Game phases, in round order.
@@ -54,6 +55,7 @@ class Player(object):
     trade_goods: int = 0
     commodities: int = 0
     technologies: List[str] = dataclasses.field(default_factory=list)
+    victory_points: int = 0
 
     @property
     def faction_data(self):
@@ -101,7 +103,7 @@ class EventLog(object):
 
 class GameState(object):
     def __init__(self, board, players, speaker, round_number=1, phase=STRATEGY,
-                 custodians=True, log=None):
+                 custodians=True, log=None, passed=()):
         self.board = board
         self.players = list(players)
         self.speaker = speaker
@@ -110,6 +112,8 @@ class GameState(object):
         # Whether the custodians token is still on Mecatol Rex.
         self.custodians = custodians
         self.log = log or EventLog()
+        # Players who have passed in this round's action phase.
+        self.passed = set(passed)
 
     def Log(self, kind, **details):
         self.log.Append(Event(self.round_number, self.phase, kind, details))
@@ -119,6 +123,18 @@ class GameState(object):
             if player.name == name:
                 return player
         raise KeyError(name)
+
+    def SeatOrderFromSpeaker(self):
+        """Player names in seat order, starting with the speaker. Until
+        strategy cards exist, this is also the initiative order."""
+        names = [p.name for p in self.players]
+        i = names.index(self.speaker)
+        return names[i:] + names[:i]
+
+    def Winner(self):
+        """The player who has reached the victory point target, if any."""
+        best = max(self.players, key=lambda p: p.victory_points)
+        return best.name if best.victory_points >= VICTORY_POINTS_TO_WIN else None
 
     def HomeSystem(self, name):
         """The coordinates of a player's home system."""
@@ -238,7 +254,10 @@ def Summary(state):
     lines.append('')
     for player in state.players:
         planets = player.ControlledPlanets(state.board)
-        lines.append('%s (%s)' % (player.name, player.faction_data['name']))
+        lines.append('%s (%s): %d victory point%s%s' % (
+            player.name, player.faction_data['name'], player.victory_points,
+            '' if player.victory_points == 1 else 's',
+            ', passed' if player.name in state.passed else ''))
         lines.append('  command tokens: %d tactic, %d fleet, %d strategy' % (
             player.tactic_tokens, player.fleet_tokens, player.strategy_tokens))
         lines.append('  trade goods %d, commodities %d/%d' % (
@@ -325,6 +344,7 @@ def ToDict(state):
         'phase': state.phase,
         'speaker': state.speaker,
         'custodians': state.custodians,
+        'passed': sorted(state.passed),
         'players': [dataclasses.asdict(p) for p in state.players],
         'systems': systems,
         'log': [dataclasses.asdict(e) for e in state.log],
@@ -352,7 +372,8 @@ def FromDict(d):
                      round_number=d['round'],
                      phase=d['phase'],
                      custodians=d['custodians'],
-                     log=EventLog(Event(**e) for e in d['log']))
+                     log=EventLog(Event(**e) for e in d['log']),
+                     passed=d.get('passed', []))
 
 
 def Save(state, path):

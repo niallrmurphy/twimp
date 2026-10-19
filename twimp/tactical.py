@@ -37,6 +37,7 @@ from twimp.units import Category, Unit, UnitType
 MECATOL_REX_PLANET = 'Mecatol Rex'
 ANTIMASS_DEFLECTORS = 'Antimass Deflectors'
 WAR_SUN = 'War Sun'
+CUSTODIANS_COST = 6
 
 
 class IllegalAction(Exception):
@@ -89,6 +90,7 @@ class TacticalReport(object):
     space_combat: Optional[combat.CombatResult] = None
     retreated_to: Optional[hexes.Hex] = None
     capacity_losses: Dict[str, List] = dataclasses.field(default_factory=dict)
+    removed_custodians: bool = False
     invasion: Optional[invasion_lib.InvasionResult] = None
     produced: Dict[UnitType, int] = dataclasses.field(default_factory=dict)
     paid_planets: List[str] = dataclasses.field(default_factory=list)
@@ -349,10 +351,12 @@ class _Turn(object):
     def Invade(self):
         if self.system.HasOtherPlayersShips(self.player):
             return
-        planets = [p for p in self.system.planets
-                   if not (self.state.custodians and p.name == MECATOL_REX_PLANET)]
         ships = self.system.ShipsOf(self.player)
         ground = [u for u in self.system.UnitsInSpace(self.player) if u.IsGroundForce()]
+        if ground:
+            self._MaybeRemoveCustodians()
+        planets = [p for p in self.system.planets
+                   if not (self.state.custodians and p.name == MECATOL_REX_PLANET)]
         if not planets or not (ground or any(s.stats.bombardment for s in ships)):
             return
         before = {p.name: p.controller for p in planets}
@@ -364,6 +368,24 @@ class _Turn(object):
             if planet.controller == self.player and before[planet.name] != self.player:
                 self.state.Log('planet_gained', player=self.player, planet=planet.name,
                                previous=before[planet.name])
+
+    def _MaybeRemoveCustodians(self):
+        """Before landing on Mecatol Rex, the custodians token must be
+        removed by spending 6 influence, which scores 1 victory point."""
+        if not self.state.custodians or not any(
+                p.name == MECATOL_REX_PLANET for p in self.system.planets):
+            return
+        if Spendable(self.state, self.player, 'influence') < CUSTODIANS_COST:
+            return
+        if not self._Agent(self.player).ChooseRemoveCustodians(
+                self.state, self.player, CUSTODIANS_COST):
+            return
+        planets, trade_goods = PayInfluence(self.state, self.player, CUSTODIANS_COST)
+        self.state.custodians = False
+        self.state.Player(self.player).victory_points += 1
+        self.report.removed_custodians = True
+        self.state.Log('custodians_removed', player=self.player, exhausted=planets,
+                       trade_goods=trade_goods)
 
     # Step 5.
     def Produce(self):
@@ -456,21 +478,36 @@ def PayResources(state, player, cost):
     """Pay `cost` resources by exhausting planets and spending trade goods,
     wasting as little as possible: least overspend, then fewest trade goods,
     then least influence tied up. Returns (planet names, trade goods)."""
+    return _Pay(state, player, cost, 'resources', 'influence')
+
+
+def PayInfluence(state, player, cost):
+    """Like PayResources, but spending influence."""
+    return _Pay(state, player, cost, 'influence', 'resources')
+
+
+def Spendable(state, player, value):
+    """Ready planets' total `value` ('resources' or 'influence') plus trade goods."""
     p = state.Player(player)
-    ready = [pl for pl in p.ReadyPlanets(state.board) if pl.resources > 0]
+    return sum(getattr(pl, value) for pl in p.ReadyPlanets(state.board)) + p.trade_goods
+
+
+def _Pay(state, player, cost, value, other):
+    p = state.Player(player)
+    ready = [pl for pl in p.ReadyPlanets(state.board) if getattr(pl, value) > 0]
     best = None
     for mask in range(1 << len(ready)):
         chosen = [pl for i, pl in enumerate(ready) if mask >> i & 1]
-        resources = sum(pl.resources for pl in chosen)
-        trade_goods = max(0, cost - resources)
+        paid = sum(getattr(pl, value) for pl in chosen)
+        trade_goods = max(0, cost - paid)
         if trade_goods > p.trade_goods:
             continue
-        score = (resources + trade_goods - cost, trade_goods,
-                 sum(pl.influence for pl in chosen), len(chosen))
+        score = (paid + trade_goods - cost, trade_goods,
+                 sum(getattr(pl, other) for pl in chosen), len(chosen))
         if best is None or score < best[0]:
             best = (score, chosen, trade_goods)
     if best is None:
-        raise IllegalAction("%s can't pay %d resources" % (player, cost))
+        raise IllegalAction("%s can't pay %d %s" % (player, cost, value))
     _, chosen, trade_goods = best
     for planet in chosen:
         planet.exhausted = True
@@ -529,6 +566,8 @@ def DescribeReport(state, report):
                 state.board.SystemAt(report.retreated_to).Label()))
     for player, lost in report.capacity_losses.items():
         lines.append('  %s loses %s beyond capacity' % (player, game_lib.DescribeUnits(lost)))
+    if report.removed_custodians:
+        lines.append('  spends 6 influence to remove the custodians token (+1 victory point)')
     if report.invasion:
         for r in report.invasion.reports:
             bits = []

@@ -4,7 +4,7 @@
 
 import random
 
-from twimp.units import UNIT_STATS, UnitType
+from twimp.units import UNIT_STATS, Category, UnitType
 
 MECATOL_REX = 'Mecatol Rex'
 
@@ -76,6 +76,30 @@ class Agent(object):
         """Choose `count` of these units to remove, e.g. fighters beyond
         capacity or ships beyond the fleet pool. Returns a list of Units."""
         raise NotImplementedError
+
+    # Round choices (see rounds.py).
+
+    def ChooseAction(self, state, player, options):
+        """Choose what to do on our turn in the action phase.
+
+        Args:
+          options: a list of action names: 'tactical' (when we have a tactic
+            token) and 'pass'.
+        """
+        return options[0]
+
+    def ChooseRemoveCustodians(self, state, player, cost):
+        """Spend `cost` influence to remove the custodians token from Mecatol
+        Rex (scoring 1 victory point) so ground forces can land there?"""
+        return False
+
+    def ChooseCommandTokens(self, state, player, total):
+        """Status phase: split `total` command tokens between the tactic,
+        fleet and strategy pools. Returns (tactic, fleet, strategy)."""
+        p = state.Player(player)
+        gained = total - p.tactic_tokens - p.fleet_tokens - p.strategy_tokens
+        return (p.tactic_tokens + (gained + 1) // 2, p.fleet_tokens + gained // 2,
+                p.strategy_tokens)
 
     # Tactical action choices (see tactical.py).
 
@@ -156,32 +180,83 @@ class GreedyAgent(Agent):
             choice.setdefault(target, []).extend(forces)
         return choice
 
+    def ChooseAction(self, state, player, options):
+        """Take a tactical action if there's a planet to grab or something to
+        build at home; otherwise pass rather than waste a token."""
+        if 'tactical' not in options:
+            return 'pass'
+        from twimp import tactical  # tactical imports this module
+        activation = tactical.ActivationOptions(state, player)
+        if self._BestTarget(state, player, activation) or self._CanBuildAtHome(
+                state, player, activation):
+            return 'tactical'
+        return 'pass'
+
+    def ChooseRemoveCustodians(self, state, player, cost):
+        return True
+
+    def ChooseCommandTokens(self, state, player, total):
+        """Mostly tactic tokens; one into the fleet pool if it's full anywhere."""
+        p = state.Player(player)
+        gained = total - p.tactic_tokens - p.fleet_tokens - p.strategy_tokens
+        full = any(sum(1 for u in s.ShipsOf(player) if u.unit_type != UnitType.FIGHTER)
+                   >= p.fleet_tokens for s in state.board.systems.values())
+        to_fleet = 1 if full and gained else 0
+        return (p.tactic_tokens + gained - to_fleet, p.fleet_tokens + to_fleet,
+                p.strategy_tokens)
+
     # Tactical choices: a simple plan of "take the most valuable planets we
     # can reach that no enemy ships guard, otherwise build at home".
 
-    def ChooseActivation(self, state, player, options):
+    @staticmethod
+    def _Influence(state, player):
+        p = state.Player(player)
+        return sum(pl.influence for pl in p.ReadyPlanets(state.board)) + p.trade_goods
+
+    def _BestTarget(self, state, player, options):
+        """The most valuable unguarded system we can reach with ground forces."""
+        can_take_mecatol = self._Influence(state, player) >= 6
         best, best_score = None, None
         for coord, movers in options.items():
             system = state.board.SystemAt(coord)
+            movers = [m for m in movers if not m.path.rifts_exited]  # too risky
             if not movers or system.HasOtherPlayersShips(player):
                 continue
             if not any(m.ship.capacity_limit for m in movers):
                 continue
             targets = [p for p in system.planets if p.controller != player
-                       and not (state.custodians and p.name == MECATOL_REX)]
+                       and (not state.custodians or p.name != MECATOL_REX
+                            or can_take_mecatol)]
             if not targets:
                 continue
             defenders = sum(len(p.GroundForces(o)) for p in targets
                             for o in p.OtherPlayers(player))
-            score = (sum(p.resources + p.influence for p in targets) - 2 * defenders,
+            # Taking Mecatol Rex from the custodians is worth a victory point.
+            bonus = 10 if state.custodians and any(p.name == MECATOL_REX for p in targets) else 0
+            score = (sum(p.resources + p.influence for p in targets) - 2 * defenders + bonus,
                      -min(len(m.path.systems) for m in movers))
             if best_score is None or score > best_score:
                 best, best_score = coord, score
+        return best
+
+    @staticmethod
+    def _CanBuildAtHome(state, player, options):
+        home = state.HomeSystem(player)
+        if home not in options:
+            return False
+        system = state.board.SystemAt(home)
+        has_dock = any(u.unit_type == UnitType.SPACEDOCK
+                       for p in system.planets for u in p.UnitsOf(player))
+        p = state.Player(player)
+        resources = sum(pl.resources for pl in p.ReadyPlanets(state.board)) + p.trade_goods
+        return has_dock and resources > 0
+
+    def ChooseActivation(self, state, player, options):
+        best = self._BestTarget(state, player, options)
         if best is not None:
             return best
-        home = state.HomeSystem(player)
-        if home in options:
-            return home
+        if self._CanBuildAtHome(state, player, options):
+            return state.HomeSystem(player)
         return next(iter(options))
 
     def ChooseMovement(self, state, player, active, options, transportable):
@@ -193,6 +268,8 @@ class GreedyAgent(Agent):
             for planet in state.board.SystemAt(start).planets:
                 keep.update(id(u) for u in planet.GroundForces(player)[:1])
         for option in sorted(options, key=lambda o: -o.ship.capacity_limit):
+            if option.path.rifts_exited:
+                continue   # not worth risking the ship
             cargo = []
             pool = [u for u in transportable.get(option.start, [])
                     if id(u) not in used and id(u) not in keep]
@@ -303,6 +380,18 @@ class RandomAgent(Agent):
     def ChooseRetreatSystem(self, state, player, options):
         return self.rng.choice(options)
 
+    def ChooseAction(self, state, player, options):
+        if 'tactical' in options and self.rng.random() < 0.85:
+            return 'tactical'
+        return 'pass'
+
+    def ChooseRemoveCustodians(self, state, player, cost):
+        return self.rng.random() < 0.5
+
+    def ChooseCommandTokens(self, state, player, total):
+        cuts = sorted(self.rng.randint(0, total) for _ in range(2))
+        return (cuts[0], cuts[1] - cuts[0], total - cuts[1])
+
     def ChooseProduction(self, state, player, coord, context):
         choice = {}
         budget, limit = context.budget, context.limit
@@ -344,3 +433,29 @@ def _Cost(choice):
         stats = UNIT_STATS[unit_type]
         total += -(-count // stats.units_per_cost) * stats.cost
     return total
+
+
+def ProductionProblem(choice, context):
+    """Why a production choice isn't allowed, or None. Mirrors the engine's
+    checks, so a person can be asked again rather than hitting an error."""
+    total = sum(choice.values())
+    if total > context.limit:
+        return 'That is %d units; the limit is %d' % (total, context.limit)
+    cost = _Cost(choice)
+    if cost > context.budget:
+        return 'That costs %d; you have %d' % (cost, context.budget)
+    ships = sum(n for t, n in choice.items()
+                if UNIT_STATS[t].category == Category.SHIP and t != UnitType.FIGHTER)
+    fighters = choice.get(UnitType.FIGHTER, 0)
+    if (ships or fighters) and not context.can_produce_ships:
+        return "A blockaded space dock can't produce ships"
+    if ships > context.fleet_room:
+        return 'Only room for %d more non-fighter ship(s) in the fleet pool' % context.fleet_room
+    new_capacity = sum(UNIT_STATS[t].capacity * n for t, n in choice.items())
+    if fighters > context.fighter_room + new_capacity:
+        return 'Only room for %d more fighter(s)' % (context.fighter_room + new_capacity)
+    for t, n in choice.items():
+        room = context.plastic_room[t]
+        if room is not None and n > room:
+            return 'Only %d %s left in reinforcements' % (room, t.name.lower())
+    return None

@@ -53,6 +53,17 @@ class TestCliAgent(unittest.TestCase):
         self.assertTrue(Agent('maybe', 'y').DeclareRetreat([], [], 1))
         self.assertFalse(Agent('').DeclareRetreat([], [], 1))
 
+    def testRoundChoices(self):
+        state = game.NewGame(['sol', 'letnev'], seed=1)
+        self.assertEqual(Agent('x', 'p').ChooseAction(state, 'sol', ['tactical', 'pass']),
+                         'pass')
+        self.assertEqual(Agent('').ChooseAction(state, 'sol', ['tactical', 'pass']),
+                         'tactical')
+        self.assertEqual(Agent('1 2', '3 3 2', '4 3 2').ChooseCommandTokens(state, 'sol', 9),
+                         (4, 3, 2))
+        self.assertTrue(Agent('').ChooseRemoveCustodians(state, 'sol', 6))
+        self.assertFalse(Agent('n').ChooseRemoveCustodians(state, 'sol', 6))
+
     def testProduction(self):
         agent = Agent('warsun', 'cruiser=2', 'infantry=9', 'cruiser=1, infantry=2')
         state = game.NewGame(['sol', 'letnev'], seed=1)
@@ -110,6 +121,13 @@ class TestPlayTurn(unittest.TestCase):
         text, _ = self.Play([], '--actions', '6', '--seed', '2', '--agent', 'random')
         self.assertEqual(text.count(' activates '), 6)
         self.assertIn('Round 1, strategy phase', text)
+
+    def testRounds(self):
+        text, _ = self.Play([], '--factions', 'sol,letnev', '--rounds', '2', '--quiet',
+                            '--seed', '1')
+        self.assertIn('=== Round 1 ===', text)
+        self.assertIn('=== Round 2 ===', text)
+        self.assertIn('sol passes.', text)
 
     def testRunsOutOfTacticTokens(self):
         text, _ = self.Play([], '--factions', 'sol,letnev', '--actions', '9', '--quiet')
