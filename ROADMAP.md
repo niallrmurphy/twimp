@@ -34,10 +34,14 @@ Run the tests from the repo root with `python3 -m unittest`.
 | `twimp/hexes.py` | Axial hex coordinates: neighbours, distance, rings in map-string order. |
 | `twimp/board.py` | `Planet` (controller, exhausted, trait, tech specialty, units), `System` (one tile: planets, wormholes, anomaly, units in space), and `Board` (systems on the grid, loaded from a map string, with wormhole adjacency and a text render). |
 | `twimp/data/tiles.json` | Base-game tiles 1–50. |
+| `twimp/data/factions.json` | 15 base-game factions: home system, commodities, starting tech and starting units. |
+| `twimp/game.py` | `Player`, `GameState`, the event log, `NewGame` setup, a text summary, and JSON save/load. |
+| `twimp/limits.py` | Capacity and fleet-pool checks, and removal of excess units. |
+| `twimp/game_cli.py` | CLI: `python3 -m twimp.game_cli new --factions sol,hacan,naalu --save game.json`, then `show game.json`. |
 | `twimp/movement.py` | Which systems a ship can reach, under the anomaly, wormhole and enemy-ship rules. |
 | `twimp/show_map.py` | CLI: `python3 -m twimp.show_map --from 26 --move 2` draws the map and lists where a ship can go. |
 | `twimp/cards.py` | Empty. |
-| `tests/` | 131 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
+| `tests/` | 162 tests. `tests/fakes.py` has `ScriptedDice` for exact dice-by-dice scenarios. |
 
 ---
 
@@ -144,23 +148,42 @@ Deferred:
 - Retreat destinations (stage 5), now that adjacency exists.
 - Random map generation, and PoK hyperlanes.
 
-## Stage 4: Players and game state
+## Stage 4: Players and game state ✅ done
 
-- `Player`: a faction (start with one or two simple factions' starting units,
-  home system and starting tech, or one generic faction), command tokens in
-  tactic, fleet and strategy pools, trade goods, commodities, controlled
-  planets (ready or exhausted), and owned technologies.
-- `GameState`: board, players, units placed in systems (in space and on
-  planets), round number, speaker, custodians token on Mecatol Rex.
-- Constraints: fleet pool limits non-fighter ships per system, and capacity
-  limits fighters and ground forces in space.
-- Serialise to and from JSON so tests and debugging can start from a saved
-  state.
-- An append-only event log, so every state change is a recorded event. You
-  will need this for debugging and replays.
+- Faction data for 15 of the 17 base factions, converted from the
+  [AsyncTI4 bot](https://github.com/AsyncTI4/TI4_map_generator_bot)'s
+  `data/factions/base.json`. It includes which home planet each ground force
+  and structure starts on. A test checks that every faction's starting units
+  fit within capacity and the fleet pool.
+- `Player`: faction, command tokens (3 tactic, 3 fleet, 2 strategy),
+  trade goods, commodities and technologies (names only for now).
+  Controlled planets are worked out from the board, so there's a single
+  source of truth.
+- `GameState`: board, players in seat order, speaker, round and phase, the
+  custodians token, and an append-only event log.
+- `NewGame(factions, map, speaker, seed)`: uses home systems already on the
+  map, or puts them in empty outer-ring slots, then places starting units.
+  Home planets start controlled and ready. The speaker is chosen at random
+  from the seed.
+- Limits (`twimp/limits.py`):
+  - Capacity: fighters and ground forces in space vs. ship capacity, with 3
+    free fighters per space dock in the system.
+  - Fleet pool: non-fighter ships vs. fleet tokens.
+  - When there's excess, the agent chooses what goes (`ChooseUnitsToRemove`),
+    and it's logged.
+- JSON save/load stores tile ids plus what changes during a game (control,
+  exhaustion, units, damage, players, log). Loading rebuilds planets from
+  tile data.
+- `python3 -m twimp.game_cli new|show|factions`.
 
-**Done when:** a game can be set up from a map and factions, saved, reloaded,
-and printed.
+Deferred:
+- The Clan of Saar (space docks start in space) and the Ghosts of Creuss
+  (home system off the board), until faction abilities exist.
+- Winnu's starting tech choice. They start with none for now.
+- Reinforcements (the plastic limit across the whole board), command token
+  supply (16 per player), and faction-specific units such as flagships.
+- Calling the limit checks at the right moments: capacity after combat,
+  both after movement and production. That's stage 5's job.
 
 ## Stage 5: The tactical action ← **Milestone A**
 

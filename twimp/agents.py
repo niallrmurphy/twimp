@@ -68,6 +68,11 @@ class Agent(object):
         """
         return {}
 
+    def ChooseUnitsToRemove(self, units, count):
+        """Choose `count` of these units to remove, e.g. fighters beyond
+        capacity or ships beyond the fleet pool. Returns a list of Units."""
+        raise NotImplementedError
+
 
 class GreedyAgent(Agent):
     """Assigns hits to lose as little as possible and never retreats.
@@ -92,6 +97,13 @@ class GreedyAgent(Agent):
             sum(len(p.GroundForces(o)) for o in p.OtherPlayers(player)),
             -(p.resources + p.influence)))
         return {target: list(ground_forces)}
+
+    def ChooseUnitsToRemove(self, units, count):
+        """Cheapest first; fighters before infantry at the same cost."""
+        def Cost(unit):
+            return (unit.production_cost or 0,
+                    0 if unit.unit_type == UnitType.FIGHTER else 1)
+        return sorted(units, key=Cost)[:count]
 
     def AssignHits(self, units, hits):
         assignment = []

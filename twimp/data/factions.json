@@ -1,0 +1,358 @@
+{
+  "_comment": "TI4 base game factions: home system, commodities, starting technologies and starting units (ships in space; ground forces and structures on named home planets). Converted from AsyncTI4/TI4_map_generator_bot data/factions/base.json. Not yet included: the Clan of Saar (space docks start in space) and the Ghosts of Creuss (home system off the board). The Winnu choose a starting technology, so theirs is empty.",
+  "factions": {
+    "arborec": {
+      "name": "The Arborec",
+      "home_system": "5",
+      "commodities": 3,
+      "starting_tech": [
+        "Magen Defense Grid"
+      ],
+      "starting_units": {
+        "space": {
+          "CARRIER": 1,
+          "CRUISER": 1,
+          "FIGHTER": 2
+        },
+        "planets": {
+          "Nestphar": {
+            "INFANTRY": 4,
+            "PDS": 1,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "hacan": {
+      "name": "The Emirates of Hacan",
+      "home_system": "16",
+      "commodities": 6,
+      "starting_tech": [
+        "Sarween Tools",
+        "Antimass Deflectors"
+      ],
+      "starting_units": {
+        "space": {
+          "CARRIER": 2,
+          "CRUISER": 1,
+          "FIGHTER": 2
+        },
+        "planets": {
+          "Hercant": {
+            "INFANTRY": 2
+          },
+          "Arretze": {
+            "SPACEDOCK": 1,
+            "INFANTRY": 1
+          },
+          "Kamdorn": {
+            "INFANTRY": 1
+          }
+        }
+      }
+    },
+    "jolnar": {
+      "name": "The Universities of Jol-Nar",
+      "home_system": "12",
+      "commodities": 4,
+      "starting_tech": [
+        "Antimass Deflectors",
+        "Sarween Tools",
+        "Neural Motivator",
+        "Plasma Scoring"
+      ],
+      "starting_units": {
+        "space": {
+          "DREADNOUGHT": 1,
+          "CARRIER": 2,
+          "FIGHTER": 1
+        },
+        "planets": {
+          "Jol": {
+            "INFANTRY": 2,
+            "PDS": 1
+          },
+          "Nar": {
+            "SPACEDOCK": 1,
+            "PDS": 1
+          }
+        }
+      }
+    },
+    "l1z1x": {
+      "name": "The L1Z1X Mindnet",
+      "home_system": "6",
+      "commodities": 2,
+      "starting_tech": [
+        "Plasma Scoring",
+        "Neural Motivator"
+      ],
+      "starting_units": {
+        "space": {
+          "DREADNOUGHT": 1,
+          "CARRIER": 1,
+          "FIGHTER": 3
+        },
+        "planets": {
+          "[0.0.0]": {
+            "INFANTRY": 5,
+            "SPACEDOCK": 1,
+            "PDS": 1
+          }
+        }
+      }
+    },
+    "letnev": {
+      "name": "The Barony of Letnev",
+      "home_system": "10",
+      "commodities": 2,
+      "starting_tech": [
+        "Antimass Deflectors",
+        "Plasma Scoring"
+      ],
+      "starting_units": {
+        "space": {
+          "DREADNOUGHT": 1,
+          "CARRIER": 1,
+          "DESTROYER": 1,
+          "FIGHTER": 1
+        },
+        "planets": {
+          "Wren Terra": {
+            "INFANTRY": 3
+          },
+          "Arc Prime": {
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "mentak": {
+      "name": "The Mentak Coalition",
+      "home_system": "2",
+      "commodities": 2,
+      "starting_tech": [
+        "Plasma Scoring",
+        "Sarween Tools"
+      ],
+      "starting_units": {
+        "space": {
+          "CARRIER": 1,
+          "CRUISER": 2,
+          "FIGHTER": 3
+        },
+        "planets": {
+          "Moll Primus": {
+            "INFANTRY": 4,
+            "PDS": 1,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "muaat": {
+      "name": "The Embers of Muaat",
+      "home_system": "4",
+      "commodities": 4,
+      "starting_tech": [
+        "Plasma Scoring"
+      ],
+      "starting_units": {
+        "space": {
+          "WARSUN": 1,
+          "FIGHTER": 2
+        },
+        "planets": {
+          "Muaat": {
+            "INFANTRY": 4,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "naalu": {
+      "name": "The Naalu Collective",
+      "home_system": "9",
+      "commodities": 3,
+      "starting_tech": [
+        "Sarween Tools",
+        "Neural Motivator"
+      ],
+      "starting_units": {
+        "space": {
+          "CARRIER": 1,
+          "CRUISER": 1,
+          "DESTROYER": 1,
+          "FIGHTER": 3
+        },
+        "planets": {
+          "Maaluuk": {
+            "INFANTRY": 2,
+            "PDS": 1
+          },
+          "Druaa": {
+            "INFANTRY": 2,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "nekro": {
+      "name": "The Nekro Virus",
+      "home_system": "8",
+      "commodities": 3,
+      "starting_tech": [
+        "Dacxive Animators"
+      ],
+      "starting_units": {
+        "space": {
+          "DREADNOUGHT": 1,
+          "CARRIER": 1,
+          "CRUISER": 1,
+          "FIGHTER": 2
+        },
+        "planets": {
+          "Mordai II": {
+            "INFANTRY": 2,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "sardakk": {
+      "name": "Sardakk N'orr",
+      "home_system": "13",
+      "commodities": 3,
+      "starting_tech": [],
+      "starting_units": {
+        "space": {
+          "CARRIER": 2,
+          "CRUISER": 1
+        },
+        "planets": {
+          "Quinarra": {
+            "INFANTRY": 3,
+            "SPACEDOCK": 1
+          },
+          "Tren'lak": {
+            "INFANTRY": 2,
+            "PDS": 1
+          }
+        }
+      }
+    },
+    "sol": {
+      "name": "The Federation of Sol",
+      "home_system": "1",
+      "commodities": 4,
+      "starting_tech": [
+        "Antimass Deflectors",
+        "Neural Motivator"
+      ],
+      "starting_units": {
+        "space": {
+          "CARRIER": 2,
+          "DESTROYER": 1,
+          "FIGHTER": 3
+        },
+        "planets": {
+          "Jord": {
+            "INFANTRY": 5,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "winnu": {
+      "name": "The Winnu",
+      "home_system": "7",
+      "commodities": 3,
+      "starting_tech": [],
+      "starting_units": {
+        "space": {
+          "CARRIER": 1,
+          "CRUISER": 1,
+          "FIGHTER": 2
+        },
+        "planets": {
+          "Winnu": {
+            "INFANTRY": 2,
+            "PDS": 1,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "xxcha": {
+      "name": "The Xxcha Kingdom",
+      "home_system": "14",
+      "commodities": 4,
+      "starting_tech": [
+        "Graviton Laser System"
+      ],
+      "starting_units": {
+        "space": {
+          "CARRIER": 1,
+          "CRUISER": 2,
+          "FIGHTER": 3
+        },
+        "planets": {
+          "Archon Tau": {
+            "INFANTRY": 2,
+            "PDS": 1
+          },
+          "Archon Ren": {
+            "INFANTRY": 2,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "yin": {
+      "name": "The Yin Brotherhood",
+      "home_system": "3",
+      "commodities": 2,
+      "starting_tech": [
+        "Sarween Tools"
+      ],
+      "starting_units": {
+        "space": {
+          "CARRIER": 2,
+          "DESTROYER": 1,
+          "FIGHTER": 4
+        },
+        "planets": {
+          "Darien": {
+            "INFANTRY": 4,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    },
+    "yssaril": {
+      "name": "The Yssaril Tribes",
+      "home_system": "15",
+      "commodities": 3,
+      "starting_tech": [
+        "Neural Motivator"
+      ],
+      "starting_units": {
+        "space": {
+          "CARRIER": 2,
+          "CRUISER": 1,
+          "FIGHTER": 2
+        },
+        "planets": {
+          "Shalloq": {
+            "INFANTRY": 2,
+            "PDS": 1
+          },
+          "Retillion": {
+            "INFANTRY": 3,
+            "SPACEDOCK": 1
+          }
+        }
+      }
+    }
+  }
+}
